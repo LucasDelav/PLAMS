@@ -50,7 +50,7 @@ Ce script génère un ensemble de conformères pour une molécule donnée à par
 
 **Exemple d'utilisation** :
 ```bash
-$AMSBIN/amspython conformers_gen.py "C1=CC(=CC=C1CC(C(=O)O)N)O" "L-DOPA"
+$AMSBIN/amspython conformers_gen.py "C1(=O)C(=O)C=CC(=C1)C[C@@H](C(=O)O)N" "L-DOPA"
 ```
 
 **Paramètres** :
