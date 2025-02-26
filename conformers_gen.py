@@ -115,7 +115,7 @@ def print_results(job: ConformersJob, temperature=298, unit=UNIT):
     weights, Z = boltzmann_weights(energies, temperature)
 
     print(f"\nRésultats (Température = {temperature} K) :")
-    print(f'{"#":>4s} {"?E [{}]".format(unit):>16s} {"Poids Boltzmann":>16s}')
+    print(f'{"#":>4s} {"ΔE [{}]".format(unit):>16s} {"Poids Boltzmann":>16s}')
 
     for i, (energy, weight) in enumerate(zip(energies, weights)):
         print(f"{i+1:4d} {energy:16.2f} {weight:16.8f}")
