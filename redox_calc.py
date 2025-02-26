@@ -188,7 +188,7 @@ def collect_results(jobs_data):
     print("RÉSUMÉ DES CALCULS REDOX")
     print("="*80)
     
-    print(f"{'Conformère':<20} {'E(neutre)':<15} {'E(réduit SP)':<15} {'E(réduit Opt)':<15} {'?E(red-neu)':<15}")
+    print(f"{'Conformère':<20} {'E(neutre)':<15} {'E(réduit SP)':<15} {'E(réduit Opt)':<15} {'ΔE(red-neu)':<15}")
     print("-"*80)
     
     # Stocker les énergies pour calculer les énergies relatives
@@ -225,11 +225,11 @@ def collect_results(jobs_data):
         print("="*80)
         print(f"Conformère neutre le plus stable: {best_neutral[0]} (E = {best_neutral[1]:.6f} hartree)")
         print(f"Conformère réduit le plus stable: {best_reduced[0]} (E = {best_reduced[1]:.6f} hartree)")
-        print(f"Conformère avec l'énergie de réduction la plus favorable: {best_delta[0]} (?E = {best_delta[1]:.2f} kJ/mol)")
+        print(f"Conformère avec l'énergie de réduction la plus favorable: {best_delta[0]} (ΔE = {best_delta[1]:.2f} kJ/mol)")
     
     print("="*80)
-    print("Énergies en hartree, ?E en kJ/mol")
-    print("Note: ?E = E(réduit optimisé) - E(neutre optimisé)")
+    print("Énergies en hartree, ΔE en kJ/mol")
+    print("Note: ΔE = E(réduit optimisé) - E(neutre optimisé)")
 
 def export_molecules(jobs_data, output_dir="redox_structures"):
     """
@@ -285,7 +285,7 @@ def main():
     
     # Ask for confirmation before starting calculations
     if not args.skip_confirm:
-        answer = input("\nDémarrer les calculs? (o/n): ").lower()
+        answer = input("\nDémarrer les calculs ? (o/n): ").lower()
         if answer != 'o':
             print("Calculs annulés.")
             finish()
