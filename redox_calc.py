@@ -65,8 +65,8 @@ def parse_arguments():
                         help="Fonctionnelle à utiliser pour les calculs (défaut: PBE0)")
     
     # Ajout des paramètres pour le basis set
-    parser.add_argument("--basis", "-b", default="TZP", 
-                        help="Basis set à utiliser pour les calculs (défaut: TZP)")
+    parser.add_argument("--basis", "-b", default="DZP", 
+                        help="Basis set à utiliser pour les calculs (défaut: DZP)")
     
     return parser.parse_args()
 
@@ -82,18 +82,11 @@ def init_workdir(input_dir):
     # Préserver le format original du chemin (avec le point)
     workdir = os.path.join(parent_dir, "redox")
     
-    # Ne pas modifier les points dans le nom du chemin
-    # workdir = ''.join(c if c.isalnum() or c in ['-', '_', '/'] else '_' for c in workdir)
-    
-    # Création du dossier s'il n'existe pas
-    if not os.path.exists(workdir):
-        os.makedirs(workdir)
-    
     init(folder=workdir)
     return workdir
 
 def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=0, 
-                       solvent="Acetonitrile", functional="PBE0", basis="TZP"):
+                       solvent="Acetonitrile", functional="PBE0", basis="DZP"):
     """
     Configure ADF settings object based on task and molecular state
     """
@@ -125,7 +118,7 @@ def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=
 
     return s
 
-def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis="TZP"):
+def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
     """
     Étape 1: Optimisation géométrique de la molécule neutre
     """
@@ -143,7 +136,7 @@ def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis
         print(f"  ERREUR: Optimisation neutre échouée pour {name}")
         return None
 
-def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="TZP"):
+def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
     """
     Étape 2: Calcul en simple point de la molécule réduite (charge -1)
     """
@@ -164,7 +157,7 @@ def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", bas
         print(f"  ERREUR: Calcul simple point échoué pour {name} (réduit)")
         return None
 
-def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", basis="TZP"):
+def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
     """
     Étape 3: Optimisation géométrique de la molécule réduite
     """
@@ -229,24 +222,26 @@ def export_molecules(jobs_data, prefix="redox_results"):
     
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-        
+
     print(f"\nExportation des résultats de calcul dans {output_dir}/")
     
     for name, jobs in jobs_data.items():
         if not all(jobs.values()):
             continue
-            
+
         # Exporter les fichiers de résultats pour chaque calcul
         for job_type, job in jobs.items():
-            # Chercher directement le fichier .out sans utiliser rkfpath
-            out_file = os.path.join(job.path, "ams.out")
+            # Chercher le fichier .out avec le bon nom dans le répertoire du job
+            job_name = job.name
+            out_file = os.path.join(job.path, f"{job_name}.out")
+            
             if os.path.exists(out_file):
                 # Nom du fichier de sortie cible
                 target_file = os.path.join(output_dir, f"{name}_{job_type}.out")
                 # Copier le fichier
                 import shutil
                 shutil.copy2(out_file, target_file)
-                print(f"  {name}: fichier {job_type}.out exporté")
+                print(f"  Succès: fichier {name}_{job_type}.out exporté")
             else:
                 print(f"  Avertissement: fichier de sortie pour {name}_{job_type} introuvable ({out_file})")
     
@@ -258,7 +253,6 @@ def main():
     
     # Initialize PLAMS
     workdir = init_workdir(args.input_dir)
-    print(f"Dossier de travail créé: {workdir}")
     
     # Affiche les paramètres de calcul
     print("\n" + "="*50)
