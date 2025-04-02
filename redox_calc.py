@@ -5,6 +5,51 @@ import argparse
 import glob
 from scm.plams import *
 
+# Définition des fonctionnelles par catégorie
+LDA_FUNCTIONALS = ["VWN", "XALPHA", "Xonly", "Stoll"]
+GGA_FUNCTIONALS = ["PBE", "RPBE", "revPBE", "PBEsol", "BLYP", "BP86", "PW91", "mPW", "OLYP", "OPBE", 
+                  "KT1", "KT2", "BEE", "BJLDA", "BJPBE", "BJGGA", "S12G", "LB94", "mPBE", "B3LYPgauss"]
+METAGGA_FUNCTIONALS = ["M06L", "TPSS", "revTPSS", "MVS", "SCAN", "revSCAN", "r2SCAN", "tb-mBJ"]
+HYBRID_FUNCTIONALS = ["B3LYP", "B3LYP*", "B1LYP", "O3LYP", "X3LYP", "BHandH", "BHandHLYP", 
+                     "B1PW91", "MPW1PW", "MPW1K", "PBE0", "OPBE0", "TPSSh", "M06", "M06-2X", "S12H"]
+METAHYBRID_FUNCTIONALS = ["M08-HX", "M08-SO", "M11", "TPSSH", "PW6B95", "MPW1B95", "MPWB1K", 
+                         "PWB6K", "M06-HF", "BMK"]
+
+ALL_FUNCTIONALS = ['HF'] + LDA_FUNCTIONALS + GGA_FUNCTIONALS + METAGGA_FUNCTIONALS + HYBRID_FUNCTIONALS + METAHYBRID_FUNCTIONALS
+
+def configure_functional(s, functional):
+    """
+    Configure la fonctionnelle appropriée dans les paramètres Settings
+    """
+    if functional == "HF":
+        s.input.adf.XC.HF = "Yes"
+        return
+    
+    if functional in LDA_FUNCTIONALS:
+        s.input.adf.XC.LDA = functional
+        return
+
+    if functional in GGA_FUNCTIONALS:
+        s.input.adf.XC.GGA = functional
+        return
+
+    if functional in METAGGA_FUNCTIONALS:
+        s.input.adf.XC.MetaGGA = functional
+        s.input.adf.NumericalQuality = "Good"
+        return
+
+    if functional in HYBRID_FUNCTIONALS:
+        s.input.adf.XC.Hybrid = functional
+        return
+
+    if functional in METAHYBRID_FUNCTIONALS:
+        s.input.adf.XC.MetaHybrid = functional
+        s.input.adf.NumericalQuality = "Good"
+        return
+
+    print(f"Attention : Fonctionnelle {functional} non reconnue, utilisation de PBE0 par defaut")
+    s.input.adf.XC.Hybrid = "PBE0"
+
 def parse_arguments():
     """
     Parse command line arguments
@@ -13,7 +58,6 @@ def parse_arguments():
         description="Script pour calculs redox de conformères"
     )
     parser.add_argument("input_dir", help="Dossier contenant les fichiers .xyz des conformères")
-    parser.add_argument("--prefix", default="conf", help="Préfixe pour les fichiers de sortie")
     parser.add_argument("--solvent", default="Acetonitrile", help="Solvant pour les calculs")
     
     # Ajout des paramètres pour le niveau de théorie
@@ -26,12 +70,25 @@ def parse_arguments():
     
     return parser.parse_args()
 
-def init_workdir(prefix):
+def init_workdir(input_dir):
     """
-    Initialize PLAMS with custom work directory
+    Initialize PLAMS with a work directory in the same location as conformers_gen.py
     """
-    workdir = f"{prefix}_redox_workdir"
-    workdir = ''.join(c if c.isalnum() or c in ['-', '_'] else '_' for c in workdir)
+    # Extraction du chemin parent à partir de input_dir
+    parent_dir = os.path.dirname(os.path.abspath(input_dir))
+    if parent_dir.endswith('/results'):
+        parent_dir = os.path.dirname(parent_dir)
+        
+    # Préserver le format original du chemin (avec le point)
+    workdir = os.path.join(parent_dir, "redox")
+    
+    # Ne pas modifier les points dans le nom du chemin
+    # workdir = ''.join(c if c.isalnum() or c in ['-', '_', '/'] else '_' for c in workdir)
+    
+    # Création du dossier s'il n'existe pas
+    if not os.path.exists(workdir):
+        os.makedirs(workdir)
+    
     init(folder=workdir)
     return workdir
 
@@ -50,16 +107,9 @@ def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=
     s.input.adf.Basis.Type = basis
     s.input.adf.Basis.Core = "None"
     
-    # Configuration de la fonctionnelle
-    if functional in ["PBE0", "B3LYP", "BLYP", "BP86", "PBE", "revPBE", "OLYP", "OPBE"]:
-        if functional in ["PBE0", "B3LYP"]:
-            s.input.adf.XC.Hybrid = functional
-        else:
-            s.input.adf.XC.GGA = functional
-    else:
-        # Cas non standard, on définit directement la fonctionnelle
-        s.input.adf.XC.Functional = functional
-        
+    # Configuration de la fonctionnelle en utilisant la fonction dédiée
+    configure_functional(s, functional)
+    
     s.input.adf.Relativity.Level = "None"
     
     # Paramètres pour les molécules chargées ou avec des électrons non appariés
@@ -70,14 +120,9 @@ def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=
         s.input.adf.SpinPolarization = spin_polarization
         s.input.adf.Unrestricted = "Yes"
     
-    # Configuration de la solvatation
-    s.input.adf.Solvation.Surf = "Delley"
-    s.input.adf.Solvation.Solv = f"name={solvent} cav0=0.0 cav1=0.0067639"
-    s.input.adf.Solvation.Charged = "method=CONJ"
-    s.input.adf.Solvation["C-Mat"] = "POT"
-    s.input.adf.Solvation.SCF = "VAR ALL"
-    s.input.adf.Solvation.CSMRSP = ""
-    
+    # Configuration de la solvatation COSMO (modèle modifié)
+    s.input.adf.Solvation.Solv = f"name={solvent}"
+
     return s
 
 def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis="TZP"):
@@ -142,13 +187,13 @@ def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", ba
 
 def collect_results(jobs_data):
     """
-    Collecter et résumer les résultats des calculs
+    Collecter et résumer les résultats des calculs, avec énergies en kJ/mol
     """
     print("\n" + "="*80)
     print("RÉSUMÉ DES CALCULS REDOX")
     print("="*80)
     
-    print(f"{'Conformère':<15} {'E(neutre)':<15} {'E(réduit SP)':<15} {'E(réduit Opt)':<15} {'?E(red-neu)':<15}")
+    print(f"{'Conformère':<15} {'E(neutre)':<15} {'E(réduit SP)':<15} {'E(réduit Opt)':<15} {'ΔE(red-neu)':<15}")
     print("-"*80)
     
     for name, jobs in jobs_data.items():
@@ -161,19 +206,22 @@ def collect_results(jobs_data):
         e_red_sp = jobs['sp'].results.get_energy() 
         e_red_opt = jobs['opt'].results.get_energy()
         
-        # Conversion en kJ/mol (1 hartree = 2625.5 kJ/mol)
+        # Conversion directe en kJ/mol (1 hartree = 2625.5 kJ/mol)
         conversion = 2625.5
-        delta_e = (e_red_opt - e_neutral) * conversion
+        e_neutral_kj = e_neutral * conversion
+        e_red_sp_kj = e_red_sp * conversion
+        e_red_opt_kj = e_red_opt * conversion
+        delta_e = e_red_opt_kj - e_neutral_kj
         
-        print(f"{name:<15} {e_neutral:<15.6f} {e_red_sp:<15.6f} {e_red_opt:<15.6f} {delta_e:<15.2f}")
+        print(f"{name:<15} {e_neutral_kj:<15.2f} {e_red_sp_kj:<15.2f} {e_red_opt_kj:<15.2f} {delta_e:<15.2f}")
     
     print("="*80)
-    print("Énergies en hartree, ?E en kJ/mol")
-    print("Note: ?E = E(réduit optimisé) - E(neutre optimisé)")
+    print("Toutes les énergies sont exprimées en kJ/mol")
+    print("Note: ΔE = E(réduit optimisé) - E(neutre optimisé)")
 
-def export_molecules(jobs_data, prefix="redox_structures"):
+def export_molecules(jobs_data, prefix="redox_results"):
     """
-    Exporter les structures optimisées en XYZ dans le dossier de travail actuel de PLAMS
+    Exporter les fichiers de sortie .out dans le dossier de travail actuel de PLAMS
     """
     # Utiliser le dossier de travail actuel de PLAMS
     current_workdir = config.default_jobmanager.workdir
@@ -182,23 +230,25 @@ def export_molecules(jobs_data, prefix="redox_structures"):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         
-    print(f"\nExportation des structures optimisées dans {output_dir}/")
+    print(f"\nExportation des résultats de calcul dans {output_dir}/")
     
     for name, jobs in jobs_data.items():
         if not all(jobs.values()):
             continue
             
-        # Exporter la molécule neutre optimisée
-        mol_neutral = jobs['neutral'].results.get_main_molecule()
-        neutral_path = os.path.join(output_dir, f"{name}_neutre_opt.xyz")
-        mol_neutral.write(neutral_path)
-        
-        # Exporter la molécule réduite optimisée
-        mol_reduced = jobs['opt'].results.get_main_molecule()
-        reduced_path = os.path.join(output_dir, f"{name}_reduit_opt.xyz")
-        mol_reduced.write(reduced_path)
-        
-        print(f"  {name}: structures exportées")
+        # Exporter les fichiers de résultats pour chaque calcul
+        for job_type, job in jobs.items():
+            # Chercher directement le fichier .out sans utiliser rkfpath
+            out_file = os.path.join(job.path, "ams.out")
+            if os.path.exists(out_file):
+                # Nom du fichier de sortie cible
+                target_file = os.path.join(output_dir, f"{name}_{job_type}.out")
+                # Copier le fichier
+                import shutil
+                shutil.copy2(out_file, target_file)
+                print(f"  {name}: fichier {job_type}.out exporté")
+            else:
+                print(f"  Avertissement: fichier de sortie pour {name}_{job_type} introuvable ({out_file})")
     
     print(f"Exportation terminée.")
 
@@ -207,7 +257,7 @@ def main():
     args = parse_arguments()
     
     # Initialize PLAMS
-    workdir = init_workdir(args.prefix)
+    workdir = init_workdir(args.input_dir)
     print(f"Dossier de travail créé: {workdir}")
     
     # Affiche les paramètres de calcul
@@ -266,7 +316,7 @@ def main():
     # Collect and print results
     collect_results(job_results)
     
-    # Export optimized structures dans le dossier de travail actuel de PLAMS
+    # Export output files dans le dossier de travail actuel de PLAMS
     export_molecules(job_results)
     
     # Finalize PLAMS
