@@ -484,6 +484,65 @@ def analyze_redox_energies(energy_data, temperature=298.15):
     print(f"E(∆G) = {potentials['E_delta_G']:.3f} V")
     
     print("="*80)
+
+    # Enregistrer les résultats dans un fichier texte dans ../results/
+    try:
+        # Déterminer le chemin du dossier results
+        workdir = config.default_jobmanager.workdir
+        parent_dir = os.path.dirname(workdir)
+        results_dir = os.path.join(parent_dir, 'results')
+        
+        # Créer le dossier s'il n'existe pas
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+            
+        # Nom du fichier avec un horodatage pour éviter les écrasements
+        output_file = os.path.join(results_dir, f"redox_potentials.txt")
+        
+        with open(output_file, 'w') as f:
+            f.write("POTENTIELS DE RÉDUCTION\n")
+            f.write("=" * 50 + "\n\n")
+            
+            # Informations générales
+            f.write(f"Température: {temperature} K\n")
+            f.write(f"RT: {RT:.4f} kJ/mol\n")
+            f.write(f"Nombre de conformères: {len(complete_conformers)}\n\n")
+            
+            # Potentiels moyens
+            f.write("POTENTIELS MOYENS (V vs. référence):\n")
+            f.write("-" * 50 + "\n")
+            f.write(f"E(∆G) = {potentials['E_delta_G']:.4f} V\n")
+            f.write("\nContributions:\n")
+            f.write(f"E(EA) = {potentials['E_EA']:.4f} V\n")
+            f.write(f"E(Edef) = {potentials['E_Edef']:.4f} V\n")
+            f.write(f"E(∆∆U) = {potentials['E_delta_delta_U']:.4f} V\n")
+            f.write(f"E(RT) = {potentials['E_RT']:.4f} V\n")
+            f.write(f"E(T∆S) = {potentials['E_T_delta_S']:.4f} V\n")
+            f.write(f"Somme: {sum_contributions:.4f} V\n\n")
+            
+            # Données par conformère
+            f.write("DÉTAILS PAR CONFORMÈRE:\n")
+            f.write("-" * 50 + "\n")
+            f.write(f"{'Conformère':<15} {'Poids':<10} {'E(∆G) [V]':<12}\n")
+            f.write("-" * 40 + "\n")
+            
+            for conformer in sorted(complete_conformers):
+                weight = boltzmann_weights[conformer]
+                e_value = -redox_parameters[conformer]['delta_G']/F
+                f.write(f"{conformer:<15} {weight:.4f} {e_value:12.4f}\n")
+                
+            f.write("\n\nÉNERGIES (kJ/mol):\n")
+            f.write("-" * 50 + "\n")
+            f.write(f"∆G = {avg_params['delta_G']:.4f}\n")
+            f.write(f"EA = {avg_params['EA']:.4f}\n")
+            f.write(f"Edef = {avg_params['Edef']:.4f}\n")
+            f.write(f"∆∆U = {avg_params['delta_delta_U']:.4f}\n")
+            f.write(f"RT = {RT:.4f}\n")
+            f.write(f"T∆S = {avg_params['T_delta_S']:.4f}\n")
+            
+        print(f"\nRésultats enregistrés dans {output_file}")
+    except Exception as e:
+        print(f"\nErreur lors de l'enregistrement des résultats: {e}")
     
     return avg_params, potentials, redox_parameters, boltzmann_weights
 
