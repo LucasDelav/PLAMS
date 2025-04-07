@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 import shutil
 import sys
+import matplotlib.pyplot as plt
 from scm.plams import *
 from scm.conformers import ConformersJob
 from scm.plams.core.settings import Settings
@@ -321,6 +322,10 @@ def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_
                                 print(f"  [V] Conformère {i+1} : toutes les fréquences sont positives")
                                 # Récupérer la géométrie optimisée
                                 opt_mol = mol_result.get_main_molecule()
+                                png_file = os.path.join(results_dir, f"{job_name}.png")
+                                plot_molecule(opt_mol)
+                                plt.tight_layout()
+                                plt.savefig(png_file)
                                 
                                 # Enregistrer le conformère valide
                                 valid_conformers.append(opt_mol)
