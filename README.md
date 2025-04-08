@@ -111,6 +111,29 @@ optional arguments:
 - Structures optimisées (neutres et réduites) dans le dossier `{name}_workdir/redox/`
 - Fichiers de sortie `.out` contenant les résultats des calculs sont stocké dans le dossier `{name}_workdir/redox/redox_results`
 
+### Analyseur de potentiels redox (analysis.py)
+
+Ce script analyse les résultats des calculs redox en traçant des corrélations entre le potentiel redox global et ses différentes contributions (EA, Edef, ΔΔU, TΔS) pour plusieurs molécules.
+
+**Fonctionnalités** :
+- Extraction automatique des potentiels redox et leurs composantes à partir des fichiers `redox_potentials.txt`
+- Génération de graphiques de corrélation avec régression linéaire et calcul du coefficient de détermination R²
+- Création de visualisations de qualité publication avec étiquetage automatique des molécules
+
+**Exemple d'utilisation** :
+```bash
+python analysis.py L-DOPA_workdir/redox/ DOPA_workdir/redox/ Cl-DOPA_workdir/redox/ ...
+```
+
+**Parmètres** :
+- Chemins vers les dossiers contenant les fichiers `redox_potentials.txt` générés par le script `redox_calc.py`
+
+**Sorties** :
+- Graphiques au format PNG montrant les corrélations entre chaque contribution et le potentiel redox global
+- Les graphiques sont sauvegardés dans un dossier numéroté `output_N` pour faciliter l'organisation
+
+**Note** : Pour obtenir des résultats significatifs, il est recommandé d'analyser au moins 5-10 molécules différentes afin d'établir des tendances fiables.
+
 ## Détails des calculs
 
 ### Paramètres computationnels utilisés

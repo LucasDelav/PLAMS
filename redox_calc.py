@@ -480,7 +480,7 @@ def analyze_redox_energies(energy_data, temperature=298.15):
     print(f"E(T∆S) = {potentials['E_T_delta_S']:.3f} V")
     
     print("\nSomme des contributions:")
-    print(f"E(EA) + E(Edef) + E(∆∆U) - E(T∆S) = {potentials['E_EA'] + potentials['E_Edef'] + potentials['E_delta_delta_U'] - potentials['E_T_delta_S']:.3f} V")
+    print(f"E(EA) + E(Edef) + E(∆∆U) - E(T∆S) = {potentials['E_EA'] + potentials['E_Edef'] + potentials['E_delta_delta_U'] + potentials['E_T_delta_S']:.3f} V")
     print(f"E(∆G) = {potentials['E_delta_G']:.3f} V")
     
     print("="*80)
@@ -489,8 +489,7 @@ def analyze_redox_energies(energy_data, temperature=298.15):
     try:
         # Déterminer le chemin du dossier results
         workdir = config.default_jobmanager.workdir
-        parent_dir = os.path.dirname(workdir)
-        results_dir = os.path.join(parent_dir, 'results')
+        results_dir = os.path.join(workdir, 'redox_results')
         
         # Créer le dossier s'il n'existe pas
         if not os.path.exists(results_dir):
@@ -516,9 +515,8 @@ def analyze_redox_energies(energy_data, temperature=298.15):
             f.write(f"E(EA) = {potentials['E_EA']:.4f} V\n")
             f.write(f"E(Edef) = {potentials['E_Edef']:.4f} V\n")
             f.write(f"E(∆∆U) = {potentials['E_delta_delta_U']:.4f} V\n")
-            f.write(f"E(RT) = {potentials['E_RT']:.4f} V\n")
             f.write(f"E(T∆S) = {potentials['E_T_delta_S']:.4f} V\n")
-            f.write(f"Somme: {sum_contributions:.4f} V\n\n")
+            f.write(f"Somme: {potentials['E_EA'] + potentials['E_Edef'] + potentials['E_delta_delta_U'] + potentials['E_T_delta_S']:.4f} V\n\n")
             
             # Données par conformère
             f.write("DÉTAILS PAR CONFORMÈRE:\n")
