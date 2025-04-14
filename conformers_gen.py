@@ -2,6 +2,7 @@
 
 import os
 import argparse
+import re
 import numpy as np
 import shutil
 import sys
@@ -10,10 +11,12 @@ from scm.plams import *
 from scm.conformers import ConformersJob
 from scm.plams.core.settings import Settings
 
+# Constantes globales
 TEMPERATURE = 298
 R = 8.314
 UNIT = "kJ/mol"
 
+# Classification des fonctionnelles
 LDA_FUNCTIONALS = ["VWN", "XALPHA", "Xonly", "Stoll"]
 GGA_FUNCTIONALS = ["PBE", "RPBE", "revPBE", "PBEsol", "BLYP", "BP86", "PW91", "mPW", "OLYP", "OPBE", 
                   "KT1", "KT2", "BEE", "BJLDA", "BJPBE", "BJGGA", "S12G", "LB94", "mPBE", "B3LYPgauss"]
@@ -25,94 +28,105 @@ METAHYBRID_FUNCTIONALS = ["M08-HX", "M08-SO", "M11", "TPSSH", "PW6B95", "MPW1B95
 
 ALL_FUNCTIONALS = ['HF'] + LDA_FUNCTIONALS + GGA_FUNCTIONALS + METAGGA_FUNCTIONALS + HYBRID_FUNCTIONALS + METAHYBRID_FUNCTIONALS
 
-def organize_workdir(workdir, molecule_name):
-    calc_dir = os.path.join(workdir, "calculations")
-    if not os.path.exists(calc_dir):
-        os.makedirs(calc_dir)
+class DefaultJobManager:
+    """Gestionnaire de contexte pour définir temporairement un répertoire de travail."""
+    def __init__(self, job_dir):
+        self.job_dir = job_dir
+        self.original_jobmanager = None
+        self.original_workdir = None
     
-    results_dir = os.path.join(workdir, "results")
-    if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
-
-    return calc_dir, results_dir
-
-def get_actual_workdir_path(base_name):
-    if hasattr(config, 'default_jobmanager') and config.default_jobmanager:
-        return os.path.abspath(config.default_jobmanager.workdir)
-    else:
-        return None
+    def __enter__(self):
+        if hasattr(config, 'default_jobmanager'):
+            self.original_jobmanager = config.default_jobmanager
+            if hasattr(config.default_jobmanager, 'workdir'):
+                self.original_workdir = config.default_jobmanager.workdir
+        
+        os.makedirs(self.job_dir, exist_ok=True)
+        
+        if hasattr(config, 'default_jobmanager') and config.default_jobmanager:
+            config.default_jobmanager.workdir = self.job_dir
+        
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.original_workdir and hasattr(config, 'default_jobmanager') and config.default_jobmanager:
+            config.default_jobmanager.workdir = self.original_workdir
 
 def parse_arguments():
+    """Parse les arguments de ligne de commande."""
     parser = argparse.ArgumentParser(
-        description="Script d'analyse des conformers pour une molecule donnee.",
+        description="Script d'analyse des conformères pour une molécule donnée.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("smiles", help="SMILES de la molecule", type=str)
+    parser.add_argument("smiles", help="SMILES de la molécule", type=str)
     parser.add_argument(
-        "name", help="Nom de la molecule", nargs="?", default="Molecule", type=str
+        "name", help="Nom de la molécule", nargs="?", default="Molecule", type=str
     )
     
     parser.add_argument("--e-window-opt", type=float, default=10,
-                        help="Fenetre energetique (kJ/mol) pour l'etape d'optimisation")
+                        help="Fenêtre énergétique (kJ/mol) pour l'étape d'optimisation")
     
     parser.add_argument("--functional", choices=ALL_FUNCTIONALS, default="PBE0",
                         help="Fonctionnelle pour le scoring")
     parser.add_argument("--basis", choices=["SZ", "DZ", "DZP", "TZP", "TZ2P", "QZ4P"], default="TZP",
-                        help="Base utilisee pour le scoring")
+                        help="Base utilisée pour le scoring")
     parser.add_argument("--e-window-score", type=float, default=5,
-                        help="Fenetre energetique (kJ/mol) pour l'etape de scoring")
+                        help="Fenêtre énergétique (kJ/mol) pour l'étape de scoring")
     parser.add_argument("--dispersion", choices=["None", "GRIMME3", "GRIMME4", "UFF", "GRIMME3 BJDAMP"], default="GRIMME3",
                         help="Correction de dispersion pour le scoring")
     
     parser.add_argument("--e-window-filter", type=float, default=2,
-                        help="Fenetre energetique (kJ/mol) pour l'etape de filtrage")
+                        help="Fenêtre énergétique (kJ/mol) pour l'étape de filtrage")
     parser.add_argument("--rmsd-threshold", type=float, default=1.0,
-                        help="Seuil RMSD (A) pour considerer deux conformeres comme identiques")
+                        help="Seuil RMSD (Å) pour considérer deux conformères comme identiques")
     
     parser.add_argument("--freq-functional", choices=ALL_FUNCTIONALS, default=None,
-                        help="Fonctionnelle pour le calcul des frequences (par defaut: meme que scoring)")
+                        help="Fonctionnelle pour le calcul des fréquences (par défaut: même que scoring)")
     parser.add_argument("--freq-basis", choices=["SZ", "DZ", "DZP", "TZP", "TZ2P"], default="DZ",
-                        help="Base utilisee pour le calcul des frequences")
+                        help="Base utilisée pour le calcul des fréquences")
     
     return parser.parse_args()
 
-def init_with_custom_folder(name):
+def setup_workspace(name):
+    """
+    Configure l'environnement de travail complet pour une molécule donnée.
+    
+    Cette fonction:
+    1. Initialise PLAMS avec un dossier personnalisé
+    2. Crée et organise les sous-dossiers nécessaires
+    3. Renvoie les chemins des répertoires de travail
+    
+    Args:
+        name (str): Nom de la molécule, utilisé pour nommer le répertoire de travail
+        
+    Returns:
+        tuple: (workdir, calc_dir, results_dir)
+               - workdir: Répertoire principal de travail
+               - calc_dir: Sous-répertoire pour les calculs intermédiaires
+               - results_dir: Sous-répertoire pour les résultats finaux
+    """
     folder_name = f"{name}_workdir"
     folder_name = ''.join(c if c.isalnum() or c in ['-', '_'] else '_' for c in folder_name)
     
     init(folder=folder_name)
     
-    actual_workdir = get_actual_workdir_path(folder_name)
-    
-    if actual_workdir is None:
+    if hasattr(config, 'default_jobmanager') and config.default_jobmanager:
+        actual_workdir = os.path.abspath(config.default_jobmanager.workdir)
+    else:
         actual_workdir = folder_name
     
-    return actual_workdir
-
-def boltzmann_weights(energies, temperature):
-    beta = 1 / (R / 1000 * temperature)
-    exponentials = np.exp(-beta * np.array(energies))
-    partition_function = sum(exponentials)
-    weights = exponentials / partition_function
-    return weights, partition_function
-
-def print_results(job, temperature=298, unit=UNIT):
-    energies = job.results.get_relative_energies(unit)
-    weights, Z = boltzmann_weights(energies, temperature)
-
-    print(f"\nResultats (Temperature = {temperature} K) :")
-    print(f'{"#":>4s} {"Delta E [{}]".format(unit):>16s} {"Poids Boltzmann":>16s}')
-
-    for i, (energy, weight) in enumerate(zip(energies, weights)):
-        print(f"{i+1:4d} {energy:16.2f} {weight:16.8f}")
-
-    print("\nResume :")
-    print(f"Nombre total de conformers : {len(energies)}")
-    print(f"Fonction de partition (Z) = {Z:.8f}")
-
-    return energies, weights
+    calc_dir = os.path.join(actual_workdir, "calculations")
+    if not os.path.exists(calc_dir):
+        os.makedirs(calc_dir)
+    
+    results_dir = os.path.join(actual_workdir, "results")
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+    
+    return actual_workdir, calc_dir, results_dir
 
 def configure_functional(s, functional):
+    """Configure la fonctionnelle DFT pour un calcul."""
     if functional == "HF":
         s.input.adf.XC.HF = "Yes"
         return
@@ -139,11 +153,37 @@ def configure_functional(s, functional):
         s.input.adf.NumericalQuality = "Good"
         return
         
-    print(f"Attention : Fonctionnelle {functional} non reconnue, utilisation de PBE0 par defaut")
+    print(f"Attention : Fonctionnelle {functional} non reconnue, utilisation de PBE0 par défaut")
     s.input.adf.XC.Hybrid = "PBE0"
 
+def boltzmann_weights(energies, temperature):
+    """Calcule les poids de Boltzmann pour une liste d'énergies relatives."""
+    beta = 1 / (R / 1000 * temperature)
+    exponentials = np.exp(-beta * np.array(energies))
+    partition_function = sum(exponentials)
+    weights = exponentials / partition_function
+    return weights, partition_function
+
+def print_results(job, temperature=298, unit=UNIT):
+    """Affiche les résultats d'une tâche de conformères avec les poids de Boltzmann."""
+    energies = job.results.get_relative_energies(unit)
+    weights, Z = boltzmann_weights(energies, temperature)
+
+    print(f"\nRésultats (Température = {temperature} K) :")
+    print(f'{"#":>4s} {"Delta E [{}]".format(unit):>16s} {"Poids Boltzmann":>16s}')
+    
+    for i, (energy, weight) in enumerate(zip(energies, weights)):
+        print(f"{i+1:4d} {energy:16.2f} {weight:16.8f}")
+
+    print("\nRésumé :")
+    print(f"Nombre total de conformères : {len(energies)}")
+    print(f"Fonction de partition (Z) = {Z:.8f}")
+
+    return energies, weights
+
 def generate_conformers(molecule, calc_dir):
-    print("\n[Etape 1] Generation des conformers avec RDKit...")
+    """Génère des conformères initiaux avec RDKit."""
+    print("\n[Étape 1] Génération des conformères avec RDKit...")
     s = Settings()
     s.input.ams.Task = "Generate"
     s.input.ams.Generator.Method = "RDKit"
@@ -159,11 +199,12 @@ def generate_conformers(molecule, calc_dir):
         result = job.run()
     
     if not job.results:
-        raise RuntimeError("La generation des conformers a echoue.")
+        raise RuntimeError("La génération des conformères a échoué.")
     return job
 
 def optimize_conformers(previous_job, calc_dir, e_window=10):
-    print(f"\n[Etape 2] Optimisation des conformers geometriques avec DFTB3 (fenetre d'energie = {e_window} kJ/mol)...")
+    """Optimise les conformères avec DFTB3."""
+    print(f"\n[Étape 2] Optimisation des conformères géométriques avec DFTB3 (fenêtre d'énergie = {e_window} kJ/mol)...")
     s = Settings()
     s.input.ams.Task = "Optimize"
     rkf_path = os.path.abspath(previous_job.results.rkfpath())
@@ -181,11 +222,12 @@ def optimize_conformers(previous_job, calc_dir, e_window=10):
         result = job.run()
     
     if not job.results:
-        raise RuntimeError("L'optimisation des conformers a echoue.")
+        raise RuntimeError("L'optimisation des conformères a échoué.")
     return job
 
 def score_conformers(previous_job, calc_dir, functional="PBE0", basis="TZP", e_window=5, dispersion="GRIMME3"):
-    print(f"\n[Etape 3] Calcul des energies des conformers avec {functional}/{basis} (fenetre d'energie = {e_window} kJ/mol)...")
+    """Calcule les énergies précises des conformères avec une méthode DFT spécifiée."""
+    print(f"\n[Étape 3] Calcul des énergies des conformères avec {functional}/{basis} (fenêtre d'énergie = {e_window} kJ/mol)...")
     s = Settings()
     s.input.ams.Task = "Score"
     rkf_path = os.path.abspath(previous_job.results.rkfpath())
@@ -215,11 +257,12 @@ def score_conformers(previous_job, calc_dir, functional="PBE0", basis="TZP", e_w
         result = job.run()
     
     if not job.results:
-        raise RuntimeError(f"Le scoring des conformers avec {functional}/{basis} a echoue.")
+        raise RuntimeError(f"Le scoring des conformères avec {functional}/{basis} a échoué.")
     return job
 
 def filter_conformers(previous_job, calc_dir, e_window=2, rmsd_threshold=1.0):
-    print(f"\n[Etape 4] Filtrage des conformers (fenetre d'energie = {e_window} kJ/mol, RMSD = {rmsd_threshold} A)...")
+    """Filtre les conformères en fonction de leur énergie et de leur RMSD."""
+    print(f"\n[Étape 4] Filtrage des conformères (fenêtre d'énergie = {e_window} kJ/mol, RMSD = {rmsd_threshold} Å)...")
     s = Settings()
     s.input.ams.Task = "Filter"
     rkf_path = os.path.abspath(previous_job.results.rkfpath())
@@ -236,11 +279,12 @@ def filter_conformers(previous_job, calc_dir, e_window=2, rmsd_threshold=1.0):
         result = job.run()
     
     if not job.results:
-        raise RuntimeError("Le filtrage des conformers a echoue.")
+        raise RuntimeError("Le filtrage des conformères a échoué.")
     return job
 
 def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_functional="PBE0", freq_basis="DZ"):
-    print(f"\n[Etape 5] Optimisation de géométrie et vérification des fréquences avec {freq_functional}/{freq_basis}...")
+    """Optimise et vérifie les fréquences des conformères filtrés."""
+    print(f"\n[Étape 5] Optimisation de géométrie et vérification des fréquences avec {freq_functional}/{freq_basis}...")
     
     # Récupérer les conformères de l'étape précédente
     input_conformers = previous_job.results.get_conformers()
@@ -363,61 +407,39 @@ def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_
     
     return valid_conformers
 
-class DefaultJobManager:
-    def __init__(self, job_dir):
-        self.job_dir = job_dir
-        self.original_jobmanager = None
-        self.original_workdir = None
-    
-    def __enter__(self):
-        if hasattr(config, 'default_jobmanager'):
-            self.original_jobmanager = config.default_jobmanager
-            if hasattr(config.default_jobmanager, 'workdir'):
-                self.original_workdir = config.default_jobmanager.workdir
-        
-        os.makedirs(self.job_dir, exist_ok=True)
-        
-        if hasattr(config, 'default_jobmanager') and config.default_jobmanager:
-            config.default_jobmanager.workdir = self.job_dir
-        
-        return self
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.original_workdir and hasattr(config, 'default_jobmanager') and config.default_jobmanager:
-            config.default_jobmanager.workdir = self.original_workdir
-
 def main():
+    """Fonction principale du programme."""
     args = parse_arguments()
     
     if args.freq_functional is None:
         args.freq_functional = args.functional
     
-    workdir = init_with_custom_folder(args.name)
-    print(f"\nDossier de travail cree: {workdir}")
+    # Utilisation de la nouvelle fonction fusionnée
+    workdir, calc_dir, results_dir = setup_workspace(args.name)
     
-    calc_dir, results_dir = organize_workdir(workdir, args.name)
+    print(f"\nDossier de travail créé: {workdir}")
     print(f"Organisation du dossier de travail :")
-    print(f"- Calculs intermediaires : {calc_dir}")
-    print(f"- Resultats finaux : {results_dir}")
+    print(f"- Calculs intermédiaires : {calc_dir}")
+    print(f"- Résultats finaux : {results_dir}")
 
-    print(f"Creation de la molecule '{args.name}' a partir du SMILES : {args.smiles}")
+    print(f"Création de la molécule '{args.name}' à partir du SMILES : {args.smiles}")
     try:
         mol = from_smiles(args.smiles)
         mol.properties.name = args.name
     except Exception as e:
-        print(f"[X] Erreur lors de la creation de la molecule a partir du SMILES: {str(e)}")
-        print("   Verifiez que le SMILES est valide et que RDKit est correctement installe.")
+        print(f"[X] Erreur lors de la création de la molécule à partir du SMILES: {str(e)}")
+        print("   Vérifiez que le SMILES est valide et que RDKit est correctement installé.")
         finish()
         return 1
 
-    print("\nParametres de calcul:")
-    print(f"  Etape 2 : Optimisation      - E window: {args.e_window_opt} kJ/mol")
-    print(f"  Etape 3 : Scoring           - Methode: {args.functional}/{args.basis}")
-    print(f"  Etape 3 : Scoring           - E window: {args.e_window_score} kJ/mol")
-    print(f"  Etape 3 : Scoring           - Dispersion: {args.dispersion}")
-    print(f"  Etape 4 : Filtrage          - E window: {args.e_window_filter} kJ/mol")
-    print(f"  Etape 4 : Filtrage          - RMSD: {args.rmsd_threshold} A")
-    print(f"  Etape 5 : Frequences        - Methode: {args.freq_functional}/{args.freq_basis}")
+    print("\nParamètres de calcul:")
+    print(f"  Étape 2 : Optimisation      - E window: {args.e_window_opt} kJ/mol")
+    print(f"  Étape 3 : Scoring           - Méthode: {args.functional}/{args.basis}")
+    print(f"  Étape 3 : Scoring           - E window: {args.e_window_score} kJ/mol")
+    print(f"  Étape 3 : Scoring           - Dispersion: {args.dispersion}")
+    print(f"  Étape 4 : Filtrage          - E window: {args.e_window_filter} kJ/mol")
+    print(f"  Étape 4 : Filtrage          - RMSD: {args.rmsd_threshold} Å")
+    print(f"  Étape 5 : Fréquences        - Méthode: {args.freq_functional}/{args.freq_basis}")
 
     try:
         generate_job = generate_conformers(mol, calc_dir)
@@ -434,25 +456,25 @@ def main():
         
         summary_file = os.path.join(calc_dir, "filter_summary.txt")
         with open(summary_file, "w") as f:
-            f.write(f"# Conformeres apres filtrage pour {args.name}\n")
-            f.write(f"# Criteres de filtrage: E window = {args.e_window_filter} kJ/mol, RMSD = {args.rmsd_threshold} A\n")
-            f.write(f"# Temperature: {TEMPERATURE} K\n\n")
+            f.write(f"# Conformères après filtrage pour {args.name}\n")
+            f.write(f"# Critères de filtrage: E window = {args.e_window_filter} kJ/mol, RMSD = {args.rmsd_threshold} Å\n")
+            f.write(f"# Température: {TEMPERATURE} K\n\n")
             f.write(f"{'#':>3s} {'Delta E [kJ/mol]':>16s} {'Poids Boltzmann':>16s}\n")
             
             for i, (energy, weight) in enumerate(zip(energies, weights)):
                 f.write(f"{i+1:3d} {energy:16.4f} {weight:16.8f}\n")
                 
-            f.write(f"\nNombre total de conformeres: {len(energies)}\n")
+            f.write(f"\nNombre total de conformères: {len(energies)}\n")
         
         valid_conformers = verify_frequencies(
             filter_job, args.name, results_dir, calc_dir, args.freq_functional, args.freq_basis
         )
         
-        print(f"\nRecapitulatif final:")
-        print(f"  Nombre total de conformeres identifies: {len(filter_job.results.get_conformers())}")
-        print(f"  Nombre de conformeres valides (sans frequences imaginaires): {len(valid_conformers)}")
-        print(f"\nLes conformeres valides sont disponibles dans: {results_dir}/")
-        print(f"Un fichier de resume 'conformers_summary.txt' a ete cree dans ce dossier.")
+        print(f"\nRécapitulatif final:")
+        print(f"  Nombre total de conformères identifiés: {len(filter_job.results.get_conformers())}")
+        print(f"  Nombre de conformères valides (sans fréquences imaginaires): {len(valid_conformers)}")
+        print(f"\nLes conformères valides sont disponibles dans: {results_dir}/")
+        print(f"Un fichier de résumé 'conformers_summary.txt' a été créé dans ce dossier.")
 
     except RuntimeError as e:
         print(f"[X] Erreur : {e}")
