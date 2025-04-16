@@ -51,14 +51,14 @@ def parse_redox_file(filepath, parent_dir_name):
             content = file.read()
             
             # Extraction du potentiel global
-            global_match = re.search(r'E\(∆G\) = ([-\d.]+) V', content)
+            global_match = re.search(r'E\(∆G\)\s+ = ([-\d.]+) V', content)
             if global_match:
                 data['global_potential'] = float(global_match.group(1))
             else:
                 print(f"Avertissement: Potentiel global non trouvé dans {filepath}")
             
             # Extraction des contributions
-            ea_match = re.search(r'E\(EA\) = ([-\d.]+) V', content)
+            ea_match = re.search(r'E\(EA\)\s+ = ([-\d.]+) V', content)
             if ea_match:
                 data['EA'] = float(ea_match.group(1))
             else:
@@ -70,13 +70,13 @@ def parse_redox_file(filepath, parent_dir_name):
             else:
                 print(f"Avertissement: Contribution Edef non trouvée dans {filepath}")
                 
-            delta_u_match = re.search(r'E\(∆∆U\) = ([-\d.]+) V', content)
+            delta_u_match = re.search(r'E\(∆∆U\)\s+ = ([-\d.]+) V', content)
             if delta_u_match:
                 data['delta_delta_U'] = float(delta_u_match.group(1))
             else:
                 print(f"Avertissement: Contribution ∆∆U non trouvée dans {filepath}")
                 
-            t_delta_s_match = re.search(r'E\(T∆S\) = ([-\d.]+) V', content)
+            t_delta_s_match = re.search(r'E\(T∆S\)\s+ = ([-\d.]+) V', content)
             if t_delta_s_match:
                 data['T_delta_S'] = float(t_delta_s_match.group(1))
             else:
@@ -127,13 +127,176 @@ def collect_data(paths):
     
     return data_list
 
-def create_correlation_plots(data_list):
+def add_linear_regression(ax, x_values, y_values, color='red'):
+    """
+    Ajoute une régression linéaire (y = ax + b) au graphique
+    
+    Args:
+        ax: Axes matplotlib
+        x_values: Valeurs x (données indépendantes)
+        y_values: Valeurs y (données dépendantes)
+        color: Couleur de la ligne de régression
+        
+    Returns:
+        tuple: (équation sous forme de chaîne, valeur R²)
+    """
+    # Régression linéaire (y = mx + b)
+    slope, intercept = np.polyfit(x_values, y_values, 1)
+    
+    # Points x pour tracer une ligne lisse
+    x_seq = np.linspace(min(x_values), max(x_values), 100)
+    y_seq = slope * x_seq + intercept
+    
+    # Tracé de la droite de régression
+    ax.plot(x_seq, y_seq, color=color, linestyle='-', linewidth=2)
+    
+    # Calcul du R²
+    y_pred = slope * x_values + intercept
+    ss_res = np.sum((y_values - y_pred)**2)
+    ss_tot = np.sum((y_values - np.mean(y_values))**2)
+    r_squared = 1 - (ss_res / ss_tot)
+    
+    # Formulation de l'équation
+    equation = f"y = {slope:.4f}x + {intercept:.4f}"
+    
+    return equation, r_squared
+
+# Variable globale pour suivre si l'avertissement polynomial a été affiché
+_polynomial_warning_shown = False
+
+def add_polynomial_regression(ax, x_values, y_values, degree=2, color='green'):
+    """
+    Ajoute une régression polynomiale au graphique
+    """
+    global _polynomial_warning_shown
+    
+    n = len(x_values)  # Nombre de points
+    p = degree + 1     # Nombre de paramètres (degré + terme constant)
+    
+    # Vérifier le risque d'overfitting - n'afficher l'avertissement qu'une seule fois
+    if n <= p and not _polynomial_warning_shown:
+        print(f"Avertissement: Trop peu de points ({n}) pour une régression de degré {degree} ({p} paramètres).")
+        print("Le R² sera artificiellement élevé ou égal à 1.")
+        _polynomial_warning_shown = True
+    
+    # Calcul des coefficients
+    coeffs = np.polyfit(x_values, y_values, degree)
+    
+    # Création d'un polynôme avec ces coefficients
+    poly = np.poly1d(coeffs)
+    
+    # Points x pour tracer une courbe lisse
+    x_seq = np.linspace(min(x_values), max(x_values), 100)
+    y_seq = poly(x_seq)
+    
+    # Tracé de la courbe
+    ax.plot(x_seq, y_seq, color=color, linestyle='--', linewidth=2)
+    
+    # Calcul du R² standard
+    y_pred = poly(x_values)
+    ss_res = np.sum((np.array(y_values) - y_pred)**2)
+    ss_tot = np.sum((np.array(y_values) - np.mean(y_values))**2)
+    r_squared = 1 - (ss_res / ss_tot)
+    
+    # Création de l'équation pour l'étiquette
+    equation = "y = "
+    for i, coef in enumerate(coeffs):
+        power = degree - i
+        if power == 0:
+            equation += f"{coef:.4f}"
+        elif power == 1:
+            equation += f"{coef:.4f}x + "
+        else:
+            equation += f"{coef:.4f}x^{power} + "
+    
+    return equation, r_squared
+
+def add_exponential_regression(ax, x_values, y_values, color='purple'):
+    """
+    Ajoute une régression exponentielle (y = a*exp(b*x))
+    """
+    # Ajustement pour les valeurs négatives ou nulles
+    valid_indices = [i for i, y in enumerate(y_values) if y > 0]
+    if len(valid_indices) < len(y_values):
+        print("Avertissement: Certains points ignorés pour la régression exponentielle (valeurs ≤ 0)")
+    
+    x_valid = [x_values[i] for i in valid_indices]
+    y_valid = [y_values[i] for i in valid_indices]
+    
+    if len(x_valid) < 2:
+        return None, None
+    
+    # Transformation logarithmique pour ajustement linéaire
+    log_y = np.log(y_valid)
+    params, cov = np.polyfit(x_valid, log_y, 1, cov=True)
+    
+    # Extraction des paramètres
+    a = np.exp(params[1])
+    b = params[0]
+    
+    # Points x pour tracer une courbe lisse
+    x_seq = np.linspace(min(x_values), max(x_values), 100)
+    y_seq = a * np.exp(b * x_seq)
+    
+    # Tracé de la courbe
+    ax.plot(x_seq, y_seq, color=color, linestyle='-.', linewidth=2)
+    
+    # Calcul du R²
+    y_pred = a * np.exp(b * np.array(x_valid))
+    r_squared = 1 - np.sum((np.array(y_valid) - y_pred)**2) / np.sum((np.array(y_valid) - np.mean(y_valid))**2)
+    
+    return f"y = {a:.4f}·e^({b:.4f}x)", r_squared
+
+def add_logarithmic_regression(ax, x_values, y_values, color='orange'):
+    """
+    Ajoute une régression logarithmique (y = a + b*ln(x))
+    """
+    # Ajustement pour les valeurs négatives ou nulles
+    valid_indices = [i for i, x in enumerate(x_values) if x > 0]
+    if len(valid_indices) < len(x_values):
+        print("Avertissement: Certains points ignorés pour la régression logarithmique (valeurs x ≤ 0)")
+    
+    x_valid = [x_values[i] for i in valid_indices]
+    y_valid = [y_values[i] for i in valid_indices]
+    
+    if len(x_valid) < 2:
+        return None, None
+    
+    # Transformation logarithmique
+    log_x = np.log(x_valid)
+    params = np.polyfit(log_x, y_valid, 1)
+    
+    # Extraction des paramètres
+    a = params[1]
+    b = params[0]
+    
+    # Points pour courbe lisse
+    x_seq = np.linspace(min(x_valid), max(x_valid), 100)
+    y_seq = a + b * np.log(x_seq)
+    
+    # Tracé de la courbe
+    ax.plot(x_seq, y_seq, color=color, linestyle=':', linewidth=2)
+    
+    # Calcul du R²
+    y_pred = a + b * np.log(np.array(x_valid))
+    r_squared = 1 - np.sum((np.array(y_valid) - y_pred)**2) / np.sum((np.array(y_valid) - np.mean(y_valid))**2)
+    
+    return f"y = {a:.4f} + {b:.4f}·ln(x)", r_squared
+
+def create_correlation_plots(data_list, regressions=['linear', 'polynomial', 'exponential', 'logarithmic']):
     """
     Crée des graphiques de corrélation entre le potentiel global et ses contributions
+    avec différents types de régressions
     
     Args:
         data_list: Liste de dictionnaires contenant les données des potentiels
+        regressions: Liste des types de régressions à inclure 
+                    (options: 'linear', 'polynomial', 'exponential', 'logarithmic')
     """
+    # Réinitialiser l'avertissement polynomial au début
+    global _polynomial_warning_shown
+    _polynomial_warning_shown = False
+    
     if not data_list:
         print("Aucune donnée disponible pour créer les graphiques.")
         return
@@ -149,6 +312,21 @@ def create_correlation_plots(data_list):
     # Création d'un répertoire numéroté pour les graphiques
     output_dir = create_output_directory()
     
+    # Styles de couleurs et de lignes pour les différentes régressions
+    colors = {
+        'linear': 'red',
+        'polynomial': 'green',
+        'exponential': 'purple',
+        'logarithmic': 'orange'
+    }
+    
+    linestyles = {
+        'linear': '-',
+        'polynomial': '--',
+        'exponential': '-.',
+        'logarithmic': ':'
+    }
+    
     # Création des graphiques pour chaque contribution
     for contrib_key, contrib_label in contributions.items():
         # Extraction des données pour cette contribution
@@ -159,45 +337,106 @@ def create_correlation_plots(data_list):
         if not x_values or not y_values:
             print(f"Données insuffisantes pour la contribution {contrib_key}")
             continue
-            
-        # Calcul de la régression linéaire
-        slope, intercept = np.polyfit(x_values, y_values, 1)
-        regression_line = [slope * x + intercept for x in x_values]
         
-        # Calcul du coefficient de détermination R²
-        correlation_matrix = np.corrcoef(x_values, y_values)
-        correlation_xy = correlation_matrix[0, 1]
-        r_squared = correlation_xy**2
+        # Conversion en numpy arrays pour les calculs
+        x_values = np.array(x_values)
+        y_values = np.array(y_values)
         
-        # Création du graphique
-        plt.figure(figsize=(10, 8))
+        # Création de la figure
+        fig, ax = plt.subplots(figsize=(12, 9))
         
         # Tracé des points avec les noms des molécules
-        plt.scatter(x_values, y_values, s=80, alpha=0.7, c='blue', edgecolors='black')
+        ax.scatter(x_values, y_values, s=80, alpha=0.7, c='blue', edgecolors='black')
         
         # Ajout des étiquettes pour les points
         for i, label in enumerate(labels):
-            plt.annotate(label, (x_values[i], y_values[i]), 
-                        xytext=(5, 5), textcoords='offset points',
-                        fontsize=10, alpha=0.8)
+            ax.annotate(label, (x_values[i], y_values[i]), 
+                       xytext=(5, 5), textcoords='offset points',
+                       fontsize=10, alpha=0.8)
         
-        # Tracé de la droite de régression
-        plt.plot(x_values, regression_line, 'r-', linewidth=2,
-                label=f'y = {slope:.4f}x + {intercept:.4f}\nR² = {r_squared:.4f}')
+        # Liste pour stocker les lignes et labels de la légende
+        legend_handles = []
+        legend_labels = []
         
-        plt.xlabel(contrib_label, fontsize=14)
-        plt.ylabel('E(redox) (V)', fontsize=14)
-        plt.title(f'Corrélation entre {contrib_label} et le potentiel global', fontsize=16)
-        plt.legend(fontsize=12)
-        plt.grid(True, alpha=0.3, linestyle='--')
-        plt.tight_layout()
+        # 1. Régression linéaire
+        if 'linear' in regressions:
+            equation, r_squared = add_linear_regression(
+                ax, x_values, y_values, 
+                color=colors['linear']
+            )
+            
+            # Ajouter une ligne à la légende
+            from matplotlib.lines import Line2D
+            legend_handles.append(Line2D([0], [0], color=colors['linear'], 
+                                        linestyle=linestyles['linear'], linewidth=2))
+            legend_labels.append(f'Linéaire: {equation}, R² = {r_squared:.4f}')
+        
+        # 2. Régression polynomiale
+        if 'polynomial' in regressions:
+            equation, r_squared = add_polynomial_regression(
+                ax, x_values, y_values, 
+                degree=2, 
+                color=colors['polynomial']
+            )
+            
+            # Ajouter une ligne à la légende
+            from matplotlib.lines import Line2D
+            legend_handles.append(Line2D([0], [0], color=colors['polynomial'], 
+                                        linestyle=linestyles['polynomial'], linewidth=2))
+            legend_labels.append(f'Quadratique: {equation}, R² = {r_squared:.4f}')
+        
+        # 3. Régression exponentielle
+        if 'exponential' in regressions:
+            result = add_exponential_regression(
+                ax, x_values, y_values, 
+                color=colors['exponential']
+            )
+            
+            if result is not None and None not in result:
+                equation, r_squared = result
+                # Ajouter une ligne à la légende
+                from matplotlib.lines import Line2D
+                legend_handles.append(Line2D([0], [0], color=colors['exponential'], 
+                                            linestyle=linestyles['exponential'], linewidth=2))
+                legend_labels.append(f'Exponentielle: {equation}, R² = {r_squared:.4f}')
+            else:
+                print(f"Avertissement: Régression exponentielle ignorée pour {contrib_key}")
+        
+        # 4. Régression logarithmique
+        if 'logarithmic' in regressions:
+            result = add_logarithmic_regression(
+                ax, x_values, y_values, 
+                color=colors['logarithmic']
+            )
+            
+            if result is not None and None not in result:
+                equation, r_squared = result
+                # Ajouter une ligne à la légende
+                from matplotlib.lines import Line2D
+                legend_handles.append(Line2D([0], [0], color=colors['logarithmic'], 
+                                            linestyle=linestyles['logarithmic'], linewidth=2))
+                legend_labels.append(f'Logarithmique: {equation}, R² = {r_squared:.4f}')
+            else:
+                print(f"Avertissement: Régression logarithmique ignorée pour {contrib_key}")
+        
+        # Configuration des axes et légendes
+        ax.set_xlabel(contrib_label, fontsize=14)
+        ax.set_ylabel('E(redox) (V)', fontsize=14)
+        ax.set_title(f'Corrélation entre {contrib_label} et le potentiel global', fontsize=16)
+        
+        # Utiliser les handles personnalisés pour la légende
+        if legend_handles:
+            ax.legend(legend_handles, legend_labels, fontsize=10)
+        
+        ax.grid(True, alpha=0.3, linestyle='--')
+        fig.tight_layout()
         
         # Enregistrement du graphique
         output_filename = output_dir / f"correlation_{contrib_key}.png"
-        plt.savefig(output_filename, dpi=300, bbox_inches='tight')
+        fig.savefig(output_filename, dpi=300, bbox_inches='tight')
         print(f"Graphique enregistré: {output_filename}")
         
-        plt.close()
+        plt.close(fig)
     
     print(f"Tous les graphiques ont été générés avec succès dans le dossier '{output_dir}'.")
 
@@ -233,18 +472,22 @@ def main():
     """
     Fonction principale - Traite les arguments de la ligne de commande
     """
-    # Vérification des arguments
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} chemin1/redox.XXX/ chemin2/redox.YYY/ ...")
-        print(f"Exemple: {sys.argv[0]} EtOH_workdir/redox.011/ MeOH_workdir/redox.042/")
-        sys.exit(1)
+    import argparse
     
-    # Collecte des chemins à partir des arguments
-    paths = sys.argv[1:]
-    print(f"Analyse des potentiels redox pour {len(paths)} chemins...")
+    parser = argparse.ArgumentParser(description="Analyse des potentiels redox")
+    parser.add_argument('paths', nargs='+', help="Chemins vers les dossiers de redox à analyser")
+    parser.add_argument('--regressions', nargs='+', 
+                        choices=['linear', 'polynomial', 'exponential', 'logarithmic'],
+                        default=['linear', 'polynomial', 'exponential', 'logarithmic'], 
+                        help="Types de régressions à inclure dans les graphiques")
+    
+    args = parser.parse_args()
+    
+    print(f"Analyse des potentiels redox pour {len(args.paths)} chemins...")
+    print(f"Régressions sélectionnées: {', '.join(args.regressions)}")
     
     # Collecte des données
-    data_list = collect_data(paths)
+    data_list = collect_data(args.paths)
     
     if not data_list:
         print("Aucune donnée n'a pu être extraite. Vérifiez les chemins fournis.")
@@ -253,7 +496,7 @@ def main():
     print(f"Données extraites pour {len(data_list)} molécules.")
     
     # Création des graphiques de corrélation
-    create_correlation_plots(data_list)
+    create_correlation_plots(data_list, regressions=args.regressions)
 
 if __name__ == "__main__":
     main()
