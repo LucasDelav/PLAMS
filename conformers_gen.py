@@ -282,6 +282,52 @@ def filter_conformers(previous_job, calc_dir, e_window=2, rmsd_threshold=1.0):
         raise RuntimeError("Le filtrage des conformères a échoué.")
     return job
 
+def filter_boltzmann_weights(previous_job, calc_dir, weight_threshold=0.05):
+    """
+    Filtre les conformères en fonction de leurs poids de Boltzmann.
+    Ne conserve que les conformères ayant un poids supérieur ou égal au seuil spécifié.
+    """
+    print(f"\n[Filtrage Boltzmann] Sélection des conformères avec poids ≥ {weight_threshold:.2f}...")
+
+    # Récupérer les énergies et calculer les poids
+    energies = previous_job.results.get_relative_energies(UNIT)
+    weights, _ = boltzmann_weights(energies, TEMPERATURE)
+
+    # Sélectionner les conformères avec un poids supérieur au seuil
+    selected_indices = [i for i, w in enumerate(weights) if w >= weight_threshold]
+
+    # S'assurer qu'au moins le conformère de plus basse énergie est conservé
+    if not selected_indices and len(energies) > 0:
+        selected_indices = [0]  # Conserver au moins le premier (énergie minimale)
+
+    print(f"  {len(selected_indices)} conformères sélectionnés sur {len(energies)} ({len(energies) - len(selected_indices)} supprimés)")
+
+    # Obtenir tous les conformères
+    all_conformers = previous_job.results.get_conformers()
+
+    # Sélectionner uniquement les conformères voulus
+    selected_conformers = [all_conformers[i] for i in selected_indices]
+
+    # Préparer pour le calcul des fréquences
+    # Nous allons simplement enregistrer les conformères sélectionnés dans un répertoire dédié
+    boltzmann_dir = os.path.join(calc_dir, "boltzmann_filtered")
+    os.makedirs(boltzmann_dir, exist_ok=True)
+
+    # Créer un fichier de résumé
+    summary_file = os.path.join(boltzmann_dir, "boltzmann_filtered_summary.txt")
+    with open(summary_file, "w") as f:
+        f.write(f"# Conformères après filtrage Boltzmann pour poids >= {weight_threshold:.2f}\n")
+        f.write(f"# Température: {TEMPERATURE} K\n\n")
+        f.write(f"{'#':>3s} {'Index original':>16s} {'Delta E [kJ/mol]':>16s} {'Poids Boltzmann':>16s}\n")
+
+        for i, idx in enumerate(selected_indices):
+            f.write(f"{i+1:3d} {idx+1:16d} {energies[idx]:16.4f} {weights[idx]:16.8f}\n")
+
+        f.write(f"\nNombre total de conformères retenus: {len(selected_indices)}\n")
+
+    # Plutôt que de créer un nouveau job, nous allons simplement renvoyer les informations nécessaires
+    return previous_job, selected_indices
+
 def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_functional="PBE0", freq_basis="DZ"):
     """Optimise et vérifie les fréquences des conformères filtrés."""
     print(f"\n[Étape 5] Optimisation de géométrie et vérification des fréquences avec {freq_functional}/{freq_basis}...")
@@ -410,13 +456,13 @@ def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_
 def main():
     """Fonction principale du programme."""
     args = parse_arguments()
-    
+
     if args.freq_functional is None:
         args.freq_functional = args.functional
-    
+
     # Utilisation de la nouvelle fonction fusionnée
     workdir, calc_dir, results_dir = setup_workspace(args.name)
-    
+
     print(f"\nDossier de travail créé: {workdir}")
     print(f"Organisation du dossier de travail :")
     print(f"- Calculs intermédiaires : {calc_dir}")
@@ -429,8 +475,6 @@ def main():
     except Exception as e:
         print(f"[X] Erreur lors de la création de la molécule à partir du SMILES: {str(e)}")
         print("   Vérifiez que le SMILES est valide et que RDKit est correctement installé.")
-        finish()
-        return 1
 
     print("\nParamètres de calcul:")
     print(f"  Étape 2 : Optimisation      - E window: {args.e_window_opt} kJ/mol")
@@ -453,43 +497,98 @@ def main():
 
         filter_job = filter_conformers(score_job, calc_dir, args.e_window_filter, args.rmsd_threshold)
         energies, weights = print_results(filter_job, temperature=TEMPERATURE, unit=UNIT)
-        
+
         summary_file = os.path.join(calc_dir, "filter_summary.txt")
         with open(summary_file, "w") as f:
             f.write(f"# Conformères après filtrage pour {args.name}\n")
             f.write(f"# Critères de filtrage: E window = {args.e_window_filter} kJ/mol, RMSD = {args.rmsd_threshold} Å\n")
             f.write(f"# Température: {TEMPERATURE} K\n\n")
             f.write(f"{'#':>3s} {'Delta E [kJ/mol]':>16s} {'Poids Boltzmann':>16s}\n")
-            
+
             for i, (energy, weight) in enumerate(zip(energies, weights)):
                 f.write(f"{i+1:3d} {energy:16.4f} {weight:16.8f}\n")
-                
+
             f.write(f"\nNombre total de conformères: {len(energies)}\n")
-        
+
+        # Filtrage des conformères par poids de Boltzmann
+        print(f"\n[Filtrage Boltzmann] Sélection des conformères avec poids ≥ 0.05...")
+        weight_threshold = 0.05
+        filtered_conformers = []
+        filtered_indices = []
+
+        for i, (energy, weight) in enumerate(zip(energies, weights)):
+            if weight >= weight_threshold:
+                filtered_conformers.append(filter_job.results.get_conformers()[i])
+                filtered_indices.append(i)
+
+        # S'assurer qu'au moins le conformère de plus basse énergie est conservé
+        if not filtered_conformers and len(energies) > 0:
+            filtered_conformers = [filter_job.results.get_conformers()[0]]
+            filtered_indices = [0]
+
+        print(f"  {len(filtered_conformers)} conformères sélectionnés sur {len(energies)} ({len(energies) - len(filtered_conformers)} supprimés)")
+
+        # Créer un fichier de résumé pour les conformères filtrés
+        boltzmann_summary_file = os.path.join(calc_dir, "boltzmann_filter_summary.txt")
+        with open(boltzmann_summary_file, "w") as f:
+            f.write(f"# Conformères après filtrage Boltzmann pour {args.name}\n")
+            f.write(f"# Seuil de poids: {weight_threshold}\n")
+            f.write(f"# Température: {TEMPERATURE} K\n\n")
+            f.write(f"{'#':>3s} {'Index original':>16s} {'Delta E [kJ/mol]':>16s} {'Poids Boltzmann':>16s}\n")
+
+            for j, i in enumerate(filtered_indices):
+                f.write(f"{j+1:3d} {i+1:16d} {energies[i]:16.4f} {weights[i]:16.8f}\n")
+
+            f.write(f"\nNombre total de conformères retenus: {len(filtered_indices)}\n")
+
+        # Créer un job temporaire pour contenir les conformères filtrés
+        # Cette partie est simplifiée pour éviter les problèmes d'importation
+        boltzmann_dir = os.path.join(calc_dir, "boltzmann_filtered")
+        os.makedirs(boltzmann_dir, exist_ok=True)
+
+        # Sauvegarder chaque conformère filtré dans le dossier boltzmann_filtered
+        for j, (i, conf) in enumerate(zip(filtered_indices, filtered_conformers)):
+            xyz_file = os.path.join(boltzmann_dir, f"conf_{i+1}.xyz")
+            conf.write(xyz_file)
+
+        # Utiliser la fonction verify_frequencies existante sur les conformères filtrés
+        # Nous créons un conformers_job temporaire avec les mêmes propriétés que filter_job
+        temp_job = filter_job
+        # Remplacer les résultats par une version modifiée qui renvoie les conformères filtrés
+        class TempResults:
+            def __init__(self, conformers, original_results):
+                self.conformers = conformers
+                self.original_results = original_results
+
+            def get_conformers(self):
+                return self.conformers
+
+            def get_relative_energies(self, unit):
+                all_energies = self.original_results.get_relative_energies(unit)
+                return [all_energies[i] for i in filtered_indices]
+
+            def rkfpath(self):
+                return self.original_results.rkfpath()
+
+        temp_job.results = TempResults(filtered_conformers, filter_job.results)
+
         valid_conformers = verify_frequencies(
-            filter_job, args.name, results_dir, calc_dir, args.freq_functional, args.freq_basis
+            temp_job, args.name, results_dir, calc_dir, args.freq_functional, args.freq_basis
         )
-        
+
         print(f"\nRécapitulatif final:")
         print(f"  Nombre total de conformères identifiés: {len(filter_job.results.get_conformers())}")
+        print(f"  Nombre de conformères après filtrage Boltzmann: {len(filtered_conformers)}")
         print(f"  Nombre de conformères valides (sans fréquences imaginaires): {len(valid_conformers)}")
         print(f"\nLes conformères valides sont disponibles dans: {results_dir}/")
         print(f"Un fichier de résumé 'conformers_summary.txt' a été créé dans ce dossier.")
 
     except RuntimeError as e:
         print(f"[X] Erreur : {e}")
-        finish()
-        return 1
     except Exception as e:
         import traceback
         print(f"[X] Erreur inattendue: {str(e)}")
         print(traceback.format_exc())
-        finish()
-        return 1
-    finally:
-        finish()
-    
-    return 0
 
 if __name__ == "__main__":
     main()
