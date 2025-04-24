@@ -248,6 +248,156 @@ def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", ba
         print(f"  ERREUR: Optimisation réduite échouée pour {name}")
         return None
 
+def kabsch_rmsd(mol1, mol2):
+    """
+    Calcule le RMSD entre deux structures moléculaires après alignement optimal (algorithme de Kabsch).
+
+    Args:
+        mol1, mol2 (Molecule): Objets Molecule de PLAMS à comparer
+
+    Returns:
+        float: RMSD après alignement optimal en Å
+    """
+    import numpy as np
+
+    # Vérifie que les molécules ont le même nombre d'atomes
+    if len(mol1) != len(mol2):
+        print(f"Erreur: les molécules ont un nombre différent d'atomes ({len(mol1)} vs {len(mol2)})")
+        return float('inf')
+
+    # Extraire les coordonnées
+    coords1 = np.array([atom.coords for atom in mol1])
+    coords2 = np.array([atom.coords for atom in mol2])
+
+    # Centrer les structures
+    centroid1 = np.mean(coords1, axis=0)
+    centroid2 = np.mean(coords2, axis=0)
+    coords1_centered = coords1 - centroid1
+    coords2_centered = coords2 - centroid2
+
+    # Calculer la matrice de covariance
+    covariance = np.dot(coords1_centered.T, coords2_centered)
+
+    # Décomposition en valeurs singulières
+    try:
+        U, S, Vt = np.linalg.svd(covariance)
+    except np.linalg.LinAlgError:
+        print("Erreur lors de la décomposition SVD")
+        return float('inf')
+
+    # Vérifier si une réflexion est nécessaire
+    d = np.linalg.det(np.dot(Vt.T, U.T))
+    if d < 0:
+        U[:, -1] = -U[:, -1]
+
+    # Matrice de rotation optimale
+    rotation = np.dot(Vt.T, U.T)
+
+    # Appliquer la rotation à coords1_centered
+    coords1_rotated = np.dot(coords1_centered, rotation)
+
+    # Calculer le RMSD
+    squared_diff = np.sum((coords1_rotated - coords2_centered) ** 2, axis=1)
+    rmsd = np.sqrt(np.mean(squared_diff))
+
+    return rmsd
+
+def compare_conformers_rmsd(job_results):
+    """
+    Compare chaque conformère réduit avec tous les conformères neutres
+    pour identifier les changements structurels potentiels.
+
+    Args:
+        job_results (dict): Dictionnaire contenant les résultats des jobs
+
+    Returns:
+        tuple: Un tuple contenant (rmsd_results, rmsd_export_data)
+               rmsd_results: Dictionnaire avec les valeurs RMSD
+               rmsd_export_data: Données formatées pour l'export
+    """
+    rmsd_results = {}
+    rmsd_summary = []  # Pour stocker les résultats à exporter
+    rmsd_warnings = []  # Pour stocker les avertissements
+
+    # Liste des noms de tous les conformères
+    conformer_names = list(job_results.keys())
+
+    print("\n" + "="*80)
+    print("ANALYSE STRUCTURELLE PAR RMSD (ALGORITHME DE KABSCH)")
+    print("="*80)
+
+    # Pour chaque conformère réduit
+    for reduced_name in conformer_names:
+        reduced_job = job_results[reduced_name]['opt']
+        if not reduced_job or not reduced_job.ok():
+            continue
+
+        reduced_mol = reduced_job.results.get_main_molecule()
+        rmsd_results[reduced_name] = {}
+
+        # Comparer avec tous les neutres
+        min_rmsd_value = float('inf')
+        min_rmsd_name = None
+
+        for neutral_name in conformer_names:
+            neutral_job = job_results[neutral_name]['neutral']
+            if not neutral_job or not neutral_job.ok():
+                continue
+
+            neutral_mol = neutral_job.results.get_main_molecule()
+
+            # Calculer le RMSD
+            try:
+                rmsd = kabsch_rmsd(reduced_mol, neutral_mol)
+                rmsd_results[reduced_name][neutral_name] = rmsd
+
+                # Garder trace du RMSD minimum
+                if rmsd < min_rmsd_value:
+                    min_rmsd_value = rmsd
+                    min_rmsd_name = neutral_name
+
+            except Exception as e:
+                print(f"Erreur lors du calcul RMSD entre {reduced_name} et {neutral_name}: {str(e)}")
+                rmsd_results[reduced_name][neutral_name] = float('inf')
+
+        # Ajouter le meilleur résultat au résumé
+        if min_rmsd_name:
+            rmsd_summary.append((reduced_name, min_rmsd_name, min_rmsd_value))
+
+            # Déterminer si c'est un changement de conformère
+            if reduced_name != min_rmsd_name:
+                warning = f"ATTENTION: Le conformère réduit {reduced_name} correspond mieux au conformère neutre {min_rmsd_name} (RMSD: {min_rmsd_value:.4f} Å)"
+                rmsd_warnings.append(warning)
+                print(warning)
+            else:
+                # Vérifier si le RMSD est élevé même pour le même conformère
+                if min_rmsd_value > 0.3:  # Seuil arbitraire, à ajuster selon vos molécules
+                    warning = f"ATTENTION: Le conformère réduit {reduced_name} présente un RMSD élevé ({min_rmsd_value:.4f} Å) par rapport à son conformère neutre"
+                    rmsd_warnings.append(warning)
+                    print(warning)
+                else:
+                    msg = f"Le conformère réduit {reduced_name} correspond bien à son conformère neutre (RMSD: {min_rmsd_value:.4f} Å)"
+                    rmsd_warnings.append(msg)
+                    print(msg)
+
+    # Afficher uniquement le RMSD minimum pour chaque conformère
+    print("\n" + "="*80)
+    print("RÉSUMÉ DE L'ANALYSE RMSD")
+    print("="*80)
+    print(f"{'Conformère réduit':<25} {'Conformère neutre le plus proche':<30} {'RMSD (Å)':<10}")
+    print("-"*70)
+
+    for reduced_name, neutral_name, rmsd_value in rmsd_summary:
+        print(f"{reduced_name:<25} {neutral_name:<30} {rmsd_value:.4f}")
+
+    # Créer le dictionnaire d'export
+    rmsd_export_data = {
+        'summary': rmsd_summary,
+        'warnings': rmsd_warnings
+    }
+
+    return rmsd_results, rmsd_export_data
+
 def export_molecules(jobs_data, prefix="redox_results"):
     """
     Exporte les fichiers de sortie .out dans un sous-dossier spécifique du dossier de travail PLAMS
@@ -314,11 +464,19 @@ def extract_engine_energies(workdir_parent):
 
     # Dictionnaire pour stocker les résultats
     energy_results = {}
-    debug_info = {}  # Nouveau dictionnaire pour stocker les informations de débogage
+    debug_info = {}  # Dictionnaire pour stocker les informations de débogage
+
+    # Définition des patterns regex pour chaque valeur d'énergie
+    patterns = {
+        'Ee': r"Energy from Engine:\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)",
+        'U': r"Internal Energy U:\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)",
+        'TS': r"  -T\*S:\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)",
+        'G': r"Gibbs free energy:\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)",
+        'HOMO': r"HOMO \(eV\):\s+([-\d.]+)",
+        'LUMO': r"LUMO \(eV\):\s+([-\d.]+)"
+    }
 
     try:
-        #print(f"Recherche des dossiers redox* dans: {workdir_parent}")
-
         # Vérifier que le dossier parent existe
         if not os.path.exists(workdir_parent):
             print(f"ERREUR: Le dossier parent '{workdir_parent}' n'existe pas")
@@ -328,7 +486,6 @@ def extract_engine_energies(workdir_parent):
         try:
             redox_dirs = [d for d in os.listdir(workdir_parent)
                           if d.startswith('redox') and os.path.isdir(os.path.join(workdir_parent, d))]
-            #print(f"Dossiers redox* trouvés: {redox_dirs}")
         except PermissionError:
             print(f"ERREUR: Permission refusée pour accéder à '{workdir_parent}'")
             return energy_results
@@ -341,7 +498,6 @@ def extract_engine_energies(workdir_parent):
         latest_redox = sorted(redox_dirs)[-1]
         results_dir = os.path.join(workdir_parent, latest_redox, 'redox_results')
         print(f"Utilisation du dossier le plus récent: {latest_redox}")
-        # print(f"Chemin complet du dossier de résultats: {results_dir}")
 
         if not os.path.exists(results_dir):
             print(f"ERREUR: Le dossier {results_dir} n'existe pas")
@@ -359,84 +515,37 @@ def extract_engine_energies(workdir_parent):
             print(f"ERREUR: Aucun fichier .out trouvé dans {results_dir}")
             return energy_results
 
-        # print(f"Dossier analysé: {results_dir}")
-        print(f"{'Fichier':<30} {'Engine Energy':<15} {'Internal Energy U':<15} {'-T*S':<15} {'Gibbs Energy':<15}")
-        print("-"*95)
+        # En-tête du tableau
+        print(f"{'Fichier':<30} {'Engine Energy':<15} {'Internal Energy U':<15} {'-T*S':<15} {'Gibbs Energy':<15} {'HOMO (eV)':<15} {'LUMO (eV)':<15}")
+        print("-"*120)
 
         # Analyser chaque fichier .out
         for out_file in sorted(out_files):
             file_path = os.path.join(results_dir, out_file)
-            Ee = None
-            U = None
-            TS = None
-            G = None
+            energy_values = {key: None for key in patterns.keys()}
 
             # Informations de débogage pour ce fichier
             debug_info[out_file] = {
                 'file_path': file_path,
                 'file_size': os.path.getsize(file_path),
-                'found_patterns': {
-                    'Energy from Engine': False,
-                    'Internal Energy U': False,
-                    '-T*S': False,
-                    'Gibbs free energy': False
-                },
-                'raw_lines': {}
+                'found_patterns': {key: False for key in patterns},
+                'raw_matches': {}
             }
 
             try:
-                with open(file_path, 'r') as file:
-                    line_count = 0
-                    for line in file:
-                        line_count += 1
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
+                    content = file.read()
 
-                        # Recherche "Energy from Engine:"
-                        if "Energy from Engine:" in line:
-                            debug_info[out_file]['found_patterns']['Energy from Engine'] = True
-                            debug_info[out_file]['raw_lines']['Energy from Engine'] = line.strip()
-                            parts = line.split()
-                            if len(parts) >= 5:  # Au moins 5 parties après le split
-                                try:
-                                    # Prendre la dernière valeur (en kJ/mol)
-                                    Ee = float(parts[-1])
-                                except ValueError as e:
-                                    debug_info[out_file]['raw_lines']['Energy from Engine_error'] = str(e)
-
-                        # Recherche "Internal Energy U:"
-                        elif "Internal Energy U:" in line:
-                            debug_info[out_file]['found_patterns']['Internal Energy U'] = True
-                            debug_info[out_file]['raw_lines']['Internal Energy U'] = line.strip()
-                            parts = line.split()
-                            if len(parts) >= 5:  # Assez de parties après le split
-                                try:
-                                    U = float(parts[-1])  # Dernière valeur (kJ/mol)
-                                except ValueError as e:
-                                    debug_info[out_file]['raw_lines']['Internal Energy U_error'] = str(e)
-
-                        # Recherche "-T*S:"
-                        elif "-T*S:" in line:
-                            debug_info[out_file]['found_patterns']['-T*S'] = True
-                            debug_info[out_file]['raw_lines']['-T*S'] = line.strip()
-                            parts = line.split()
-                            if len(parts) >= 3:
-                                try:
-                                    TS = float(parts[-1])  # Dernière valeur (kJ/mol)
-                                except ValueError as e:
-                                    debug_info[out_file]['raw_lines']['-T*S_error'] = str(e)
-
-                        # Recherche "Gibbs free energy:"
-                        elif "Gibbs free energy:" in line:
-                            debug_info[out_file]['found_patterns']['Gibbs free energy'] = True
-                            debug_info[out_file]['raw_lines']['Gibbs free energy'] = line.strip()
-                            parts = line.split()
-                            if len(parts) >= 5:
-                                try:
-                                    G = float(parts[-1])  # Dernière valeur (kJ/mol)
-                                except ValueError as e:
-                                    debug_info[out_file]['raw_lines']['Gibbs free energy_error'] = str(e)
-
-                    # Enregistrer le nombre de lignes lues
-                    debug_info[out_file]['total_lines'] = line_count
+                    # Rechercher toutes les valeurs avec regex
+                    for key, pattern in patterns.items():
+                        match = re.search(pattern, content)
+                        if match:
+                            debug_info[out_file]['found_patterns'][key] = True
+                            debug_info[out_file]['raw_matches'][key] = match.group(0)
+                            try:
+                                energy_values[key] = float(match.group(1))
+                            except ValueError as e:
+                                debug_info[out_file]['raw_matches'][f"{key}_error"] = str(e)
 
             except Exception as e:
                 print(f"ERREUR lors de la lecture du fichier {file_path}: {str(e)}")
@@ -444,27 +553,38 @@ def extract_engine_energies(workdir_parent):
                 continue
 
             # Stocker les résultats dans le dictionnaire
-            energy_results[out_file] = {
-                'Ee': Ee,
-                'U': U,
-                'TS': TS,
-                'G': G
-            }
+            energy_results[out_file] = energy_values
+
+            # Formater les valeurs pour l'affichage
+            formatted_values = {}
+            for key, value in energy_values.items():
+                if value is None:
+                    formatted_values[key] = "Non trouvée"
+                elif key in ['HOMO', 'LUMO']:  # Valeurs en eV
+                    formatted_values[key] = f"{value:.4f}"
+                else:  # Valeurs en kJ/mol
+                    formatted_values[key] = f"{value:.2f}"
 
             # Afficher les résultats
-            Ee_str = f"{Ee:.2f}" if Ee is not None else "Non trouvée"
-            U_str = f"{U:.2f}" if U is not None else "Non trouvée"
-            TS_str = f"{TS:.2f}" if TS is not None else "Non trouvée"
-            G_str = f"{G:.2f}" if G is not None else "Non trouvée"
-
-            print(f"{out_file:<30} {Ee_str:<15} {U_str:<15} {TS_str:<15} {G_str:<15}")
+            print(f"{out_file:<30} "
+                  f"{formatted_values['Ee']:<15} "
+                  f"{formatted_values['U']:<15} "
+                  f"{formatted_values['TS']:<15} "
+                  f"{formatted_values['G']:<15} "
+                  f"{formatted_values['HOMO']:<15} "
+                  f"{formatted_values['LUMO']:<15}")
 
             # Vérifier si toutes les valeurs sont None et générer un avertissement
-            if all(v is None for v in [Ee, U, TS, G]):
+            if all(v is None for v in energy_values.values()):
                 print(f"  AVERTISSEMENT: Aucune valeur d'énergie trouvée dans {out_file}!")
 
-        print("="*95)
-        print("Toutes les énergies sont exprimées en kJ/mol")
+        print("="*120)
+        print("Les énergies Ee, U, TS et G sont exprimées en kJ/mol, HOMO et LUMO en eV")
+
+        # Statistiques de réussite
+        total_files = len(out_files)
+        successful_files = sum(1 for file in out_files if any(energy_results.get(file, {}).get(key) is not None for key in patterns))
+        print(f"Extraction réussie pour {successful_files}/{total_files} fichiers ({successful_files/total_files*100:.1f}%)")
 
     except Exception as e:
         print(f"ERREUR GLOBALE lors de l'extraction des énergies: {str(e)}")
@@ -473,20 +593,14 @@ def extract_engine_energies(workdir_parent):
 
     return energy_results
 
-def analyze_redox_energies(energy_data, temperature=298.15):
+def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=None):
     """
     Analyse les valeurs d'énergie extraites et calcule les paramètres redox.
 
     Args:
         energy_data (dict): Dictionnaire contenant les énergies extraites par fichier
         temperature (float): Température en K (par défaut: 298.15K)
-
-    Returns:
-        tuple: (avg_params, potentials, redox_parameters, boltzmann_weights)
-               - avg_params: Paramètres redox moyens
-               - potentials: Potentiels de réduction
-               - redox_parameters: Paramètres redox par conformère
-               - boltzmann_weights: Poids de Boltzmann par conformère
+        rmsd_export_data (dict, optional): Données RMSD à inclure dans le fichier d'export
     """
     try:
         import math
@@ -745,27 +859,37 @@ def analyze_redox_energies(energy_data, temperature=298.15):
             print(f"ERREUR lors du calcul des potentiels: {str(e)}")
             return avg_params, {}, redox_parameters, boltzmann_weights
 
-        # # Afficher les résultats par conformère
-        # try:
-        #     print("\nParamètres redox par conformère:")
-        #     print(f"{'Conformère':<15} {'Poids':<10} {'∆G (kJ/mol)':<12} {'EA (kJ/mol)':<12} {'Edef (kJ/mol)':<14} {'∆∆U (kJ/mol)':<14} {'-T∆S (kJ/mol)':<14}")
-        #     print("-"*95)
-        #     for conformer in sorted(complete_conformers):
-        #         params = redox_parameters[conformer]
-        #         weight = boltzmann_weights[conformer]
-        #         print(f"{conformer:<15} {weight:.4f} {params['delta_G']:12.2f} {params['EA']:12.2f} {params['Edef']:14.2f} {params['delta_delta_U']:14.2f} {-params['T_delta_S']:14.2f}")
-        # except Exception as e:
-        #     print(f"ERREUR lors de l'affichage des paramètres par conformère: {str(e)}")
+        neutral_orbitals = {}  # Dictionnaire pour stocker les valeurs HOMO/LUMO des neutres optimisés
 
-        # Afficher les moyennes pondérées
+        for filename, energies in energy_data.items():
+            match = re.search(pattern, filename)
+            if match and match.group(2) == 'neutral':
+                conformer = match.group(1)
+                if 'HOMO' in energies and 'LUMO' in energies:
+                    neutral_orbitals[conformer] = {
+                        'HOMO': energies['HOMO'],
+                        'LUMO': energies['LUMO']
+                    }
+
+        # Calculer les moyennes pondérées des HOMO et LUMO
+        weighted_homo = 0.0
+        weighted_lumo = 0.0
+        homo_lumo_available = False
+
+        for conformer in complete_conformers:
+            if conformer in neutral_orbitals:
+                weight = boltzmann_weights.get(conformer, 0.0)
+                if 'HOMO' in neutral_orbitals[conformer] and neutral_orbitals[conformer]['HOMO'] is not None:
+                    weighted_homo += neutral_orbitals[conformer]['HOMO'] * weight
+                    homo_lumo_available = True
+                if 'LUMO' in neutral_orbitals[conformer] and neutral_orbitals[conformer]['LUMO'] is not None:
+                    weighted_lumo += neutral_orbitals[conformer]['LUMO'] * weight
+                    homo_lumo_available = True
+
+        # Calculer le gap HOMO-LUMO moyen pondéré
+        weighted_gap = weighted_lumo - weighted_homo if homo_lumo_available else None
+
         try:
-            print("\nMoyennes pondérées des conformers (kJ/mol):")
-            print(f"∆G   = {avg_params['delta_G']:.2f}")
-            print(f"EA   = {avg_params['EA']:.2f}")
-            print(f"Edef = {avg_params['Edef']:.2f}")
-            print(f"∆∆U  = {avg_params['delta_delta_U']:.2f}")
-            print(f"-T∆S = {-avg_params['T_delta_S']:.2f}")
-
             # Vérifier l'égalité thermodynamique
             print(f"\nVérification de l'égalité thermodynamique:")
             print(f"∆G = {avg_params['delta_G']:.2f} kJ/mol")
@@ -786,6 +910,16 @@ def analyze_redox_energies(energy_data, temperature=298.15):
             print("\nSomme des contributions:")
             print(f"E(EA) + E(Edef) + E(∆∆U) - E(T∆S) = {sum_potentials:.3f} V")
             print(f"E(∆G) = {potentials.get('E_delta_G', 0):.3f} V")
+
+            # Afficher les moyennes pondérées des HOMO et LUMO
+            if homo_lumo_available:
+                print("\nValeurs moyennes pondérées des orbitales:")
+                print(f"HOMO moyenne: {weighted_homo:.4f} eV")
+                print(f"LUMO moyenne: {weighted_lumo:.4f} eV")
+                print(f"Gap HOMO-LUMO moyen: {weighted_gap:.4f} eV")
+            else:
+                print("\nImpossible de calculer les moyennes pondérées des HOMO/LUMO: données insuffisantes")
+
         except Exception as e:
             print(f"ERREUR lors de l'affichage des moyennes et potentiels: {str(e)}")
 
@@ -805,7 +939,7 @@ def analyze_redox_energies(energy_data, temperature=298.15):
                 print(f"ERREUR lors de la création du dossier de résultats: {str(e)}")
                 results_dir = "."  # Utiliser le répertoire courant en cas d'erreur
 
-            # Nom du fichier avec un horodatage pour éviter les écrasements
+            # Nom du fichier d'output
             output_file = os.path.join(results_dir, f"redox_potentials.txt")
 
             with open(output_file, 'w') as f:
@@ -827,12 +961,12 @@ def analyze_redox_energies(energy_data, temperature=298.15):
                 # Potentiels moyens
                 f.write("POTENTIELS MOYENS (V vs. référence):\n")
                 f.write("-" * 50 + "\n")
-                f.write(f"E(∆G)   = {potentials.get('E_delta_G', 0):.4f} V\n")
+                f.write(f"E(∆G) = {potentials.get('E_delta_G', 0):.4f} V\n")
                 f.write("\nContributions:\n")
-                f.write(f"E(EA)   = {potentials.get('E_EA', 0):.4f} V\n")
+                f.write(f"E(EA) = {potentials.get('E_EA', 0):.4f} V\n")
                 f.write(f"E(Edef) = {potentials.get('E_Edef', 0):.4f} V\n")
-                f.write(f"E(∆∆U)  = {potentials.get('E_delta_delta_U', 0):.4f} V\n")
-                f.write(f"E(T∆S)  = {potentials.get('E_T_delta_S', 0):.4f} V\n")
+                f.write(f"E(∆∆U) = {potentials.get('E_delta_delta_U', 0):.4f} V\n")
+                f.write(f"E(T∆S) = {potentials.get('E_T_delta_S', 0):.4f} V\n")
 
                 # Calcul de la somme
                 try:
@@ -864,11 +998,66 @@ def analyze_redox_energies(energy_data, temperature=298.15):
                     except Exception as e:
                         f.write(f"{conformer:<15} ERROR: {str(e)}\n")
 
-                # f.write("\n\nÉNERGIES (kJ/mol):\n")
-                # f.write("-" * 50 + "\n")
-                # for param, value in avg_params.items():
-                #     f.write(f"{param} = {value:.4f}\n")
-                # f.write(f"RT = {RT:.4f}\n")
+                # Ajouter les moyennes pondérées des HOMO/LUMO
+                f.write("\n\n" + "="*50 + "\n")
+                f.write("ÉNERGIES DES ORBITALES MOLÉCULAIRES MOYENNES PONDÉRÉES\n")
+                f.write("="*50 + "\n\n")
+
+                if homo_lumo_available:
+                    f.write(f"HOMO moyenne pondérée: {weighted_homo:.4f} eV\n")
+                    f.write(f"LUMO moyenne pondérée: {weighted_lumo:.4f} eV\n")
+                    f.write(f"Gap HOMO-LUMO moyen pondéré: {weighted_gap:.4f} eV\n")
+                else:
+                    f.write("Impossible de calculer les moyennes pondérées des orbitales: données insuffisantes\n")
+
+                # Ajouter les résultats RMSD si disponibles
+                if rmsd_export_data and 'summary' in rmsd_export_data and 'warnings' in rmsd_export_data:
+                    f.write("\n\n" + "="*50 + "\n")
+                    f.write("ANALYSE STRUCTURELLE PAR RMSD (ALGORITHME DE KABSCH)\n")
+                    f.write("="*50 + "\n\n")
+
+                    f.write(f"{'Conformère réduit':<25} {'Conformère neutre le plus proche':<30} {'RMSD (Å)':<10}\n")
+                    f.write("-"*70 + "\n")
+
+                    for reduced_name, neutral_name, rmsd_value in rmsd_export_data['summary']:
+                        f.write(f"{reduced_name:<25} {neutral_name:<30} {rmsd_value:.4f}\n")
+
+                    # Ajouter les avertissements de changement de conformère
+                    f.write("\n\n" + "="*50 + "\n")
+                    f.write("IDENTIFICATION DES POSSIBLE CHANGEMENTS DE CONFORMÈRE\n")
+                    f.write("="*50 + "\n\n")
+
+                    for warning in rmsd_export_data['warnings']:
+                        f.write(warning + "\n\n")
+
+                # Ajouter une section pour les niveaux HOMO/LUMO
+                f.write("\n\n" + "="*50 + "\n")
+                f.write("NIVEAUX ÉNERGÉTIQUES DES ORBITALES MOLÉCULAIRES PAR CONFORMÈRE\n")
+                f.write("="*50 + "\n\n")
+
+                # En-têtes du tableau
+                f.write(f"{'Conformère':<15} {'HOMO (eV)':<15} {'LUMO (eV)':<15} {'Gap (eV)':<15}\n")
+                f.write("-" * 60 + "\n")
+
+                # Écrire les valeurs pour chaque conformère
+                for conformer in sorted(complete_conformers):
+                    if conformer in neutral_orbitals:
+                        homo = neutral_orbitals[conformer].get('HOMO')
+                        lumo = neutral_orbitals[conformer].get('LUMO')
+
+                        homo_str = f"{homo:.4f}" if homo is not None else "N/A"
+                        lumo_str = f"{lumo:.4f}" if lumo is not None else "N/A"
+
+                        # Calculer le gap HOMO-LUMO
+                        if homo is not None and lumo is not None:
+                            gap = lumo - homo
+                            gap_str = f"{gap:.4f}"
+                        else:
+                            gap_str = "N/A"
+
+                        f.write(f"{conformer:<15} {homo_str:<15} {lumo_str:<15} {gap_str:<15}\n")
+                    else:
+                        f.write(f"{conformer:<15} {'N/A':<15} {'N/A':<15} {'N/A':<15}\n")
 
             print(f"\nRésultats enregistrés dans {output_file}")
 
@@ -889,10 +1078,10 @@ def main():
     """Fonction principale du programme."""
     # Parse command line arguments
     args = parse_arguments()
-    
+
     # Initialize PLAMS with workspace setup
     workdir = setup_workspace(args.input_dir)
-    
+
     # Affiche les paramètres de calcul
     print("\n" + "="*50)
     print(f"PARAMÈTRES DE CALCUL:")
@@ -900,61 +1089,64 @@ def main():
     print(f"Base: {args.basis}")
     print(f"Solvant: {args.solvent}")
     print("="*50 + "\n")
-    
+
     # Find all XYZ files in input directory
     xyz_files = glob.glob(os.path.join(args.input_dir, "*.xyz"))
     if not xyz_files:
         print(f"Aucun fichier XYZ trouvé dans {args.input_dir}")
         finish()
         return
-    
+
     print(f"Trouvé {len(xyz_files)} fichiers XYZ à traiter")
-    
+
     # Store all job results
     job_results = {}
-    
+
     # Process each XYZ file
     for xyz_file in xyz_files:
         basename = os.path.basename(xyz_file)
         name = os.path.splitext(basename)[0]  # Remove extension
-        
+
         print(f"\nTraitement de {basename}")
-        
+
         # Read molecule from XYZ
         mol = Molecule(xyz_file)
         job_results[name] = {'neutral': None, 'sp': None, 'opt': None}
-        
+
         try:
             # Step 1: Optimize neutral
             job_neutral = optimize_neutral(mol, name, args.solvent, args.functional, args.basis)
             if not job_neutral:
                 continue
             job_results[name]['neutral'] = job_neutral
-            
+
             # Step 2: Single point reduced
             job_sp = sp_reduced(job_neutral, name, args.solvent, args.functional, args.basis)
             if not job_sp:
                 continue
             job_results[name]['sp'] = job_sp
-            
+
             # Step 3: Optimize reduced
             job_opt = optimize_reduced(job_sp, name, args.solvent, args.functional, args.basis)
             if not job_opt:
                 continue
             job_results[name]['opt'] = job_opt
-            
         except Exception as e:
-            print(f"Erreur lors du traitement de {basename}: {str(e)}")
+            print(f"ERREUR lors du traitement de {basename}: {str(e)}")
+            continue
+
+    # Analyse RMSD
+    rmsd_results, rmsd_export_data = compare_conformers_rmsd(job_results)
 
     # Export output files
     export_molecules(job_results)
-    
+
     # Extraire et afficher les énergies
     parent_dir = os.path.dirname(config.default_jobmanager.workdir)
     energy_data = extract_engine_energies(parent_dir)
-    
+
     # Analyser les énergies redox
-    analyze_redox_energies(energy_data)
+    analyze_redox_energies(energy_data, rmsd_export_data=rmsd_export_data)
 
     # Finalize PLAMS
     finish()
