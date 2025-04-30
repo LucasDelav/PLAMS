@@ -64,19 +64,19 @@ def parse_arguments():
     )
     
     parser.add_argument("--e-window-opt", type=float, default=10,
-                        help="Fenêtre énergétique (kJ/mol) pour l'étape d'optimisation")
+                        help="Fenêtre énergétique (kcal/mol) pour l'étape d'optimisation")
     
     parser.add_argument("--functional", choices=ALL_FUNCTIONALS, default="PBE0",
                         help="Fonctionnelle pour le scoring")
     parser.add_argument("--basis", choices=["SZ", "DZ", "DZP", "TZP", "TZ2P", "QZ4P"], default="TZP",
                         help="Base utilisée pour le scoring")
     parser.add_argument("--e-window-score", type=float, default=5,
-                        help="Fenêtre énergétique (kJ/mol) pour l'étape de scoring")
+                        help="Fenêtre énergétique (kcal/mol) pour l'étape de scoring")
     parser.add_argument("--dispersion", choices=["None", "GRIMME3", "GRIMME4", "UFF", "GRIMME3 BJDAMP"], default="GRIMME3",
                         help="Correction de dispersion pour le scoring")
     
     parser.add_argument("--e-window-filter", type=float, default=2,
-                        help="Fenêtre énergétique (kJ/mol) pour l'étape de filtrage")
+                        help="Fenêtre énergétique (kcal/mol) pour l'étape de filtrage")
     parser.add_argument("--rmsd-threshold", type=float, default=1.0,
                         help="Seuil RMSD (Å) pour considérer deux conformères comme identiques")
     
@@ -204,7 +204,7 @@ def generate_conformers(molecule, calc_dir):
 
 def optimize_conformers(previous_job, calc_dir, e_window=10):
     """Optimise les conformères avec DFTB3."""
-    print(f"\n[Étape 2] Optimisation des conformères géométriques avec DFTB3 (fenêtre d'énergie = {e_window} kJ/mol)...")
+    print(f"\n[Étape 2] Optimisation des conformères géométriques avec DFTB3 (fenêtre d'énergie = {e_window} kcal/mol)...")
     s = Settings()
     s.input.ams.Task = "Optimize"
     rkf_path = os.path.abspath(previous_job.results.rkfpath())
@@ -227,7 +227,7 @@ def optimize_conformers(previous_job, calc_dir, e_window=10):
 
 def score_conformers(previous_job, calc_dir, functional="PBE0", basis="TZP", e_window=5, dispersion="GRIMME3"):
     """Calcule les énergies précises des conformères avec une méthode DFT spécifiée."""
-    print(f"\n[Étape 3] Calcul des énergies des conformères avec {functional}/{basis} (fenêtre d'énergie = {e_window} kJ/mol)...")
+    print(f"\n[Étape 3] Calcul des énergies des conformères avec {functional}/{basis} (fenêtre d'énergie = {e_window} kcal/mol)...")
     s = Settings()
     s.input.ams.Task = "Score"
     rkf_path = os.path.abspath(previous_job.results.rkfpath())
@@ -262,7 +262,7 @@ def score_conformers(previous_job, calc_dir, functional="PBE0", basis="TZP", e_w
 
 def filter_conformers(previous_job, calc_dir, e_window=2, rmsd_threshold=1.0):
     """Filtre les conformères en fonction de leur énergie et de leur RMSD."""
-    print(f"\n[Étape 4] Filtrage des conformères (fenêtre d'énergie = {e_window} kJ/mol, RMSD = {rmsd_threshold} Å)...")
+    print(f"\n[Étape 4] Filtrage des conformères (fenêtre d'énergie = {e_window} kcal/mol, RMSD = {rmsd_threshold} Å)...")
     s = Settings()
     s.input.ams.Task = "Filter"
     rkf_path = os.path.abspath(previous_job.results.rkfpath())
@@ -328,8 +328,8 @@ def filter_boltzmann_weights(previous_job, calc_dir, weight_threshold=0.05):
     # Plutôt que de créer un nouveau job, nous allons simplement renvoyer les informations nécessaires
     return previous_job, selected_indices
 
-def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_functional="PBE0", freq_basis="DZ"):
-    """Optimise et vérifie les fréquences des conformères filtrés."""
+def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_functional="PBE0", freq_basis="DZ", max_attempts=3):
+    """Optimise et vérifie les fréquences des conformères filtrés. Corrige les fréquences imaginaires si détectées."""
     print(f"\n[Étape 5] Optimisation de géométrie et vérification des fréquences avec {freq_functional}/{freq_basis}...")
     
     # Récupérer les conformères de l'étape précédente
@@ -349,7 +349,11 @@ def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_
     for i, conf in enumerate(input_conformers):
         print(f"  Traitement du conformère {i+1}/{num_conformers}...")
         
-        # Configurer le calcul d'optimisation + fréquences
+        # Créer un sous-dossier spécifique pour ce conformère
+        conf_dir = os.path.join(freq_dir, f"conf_{i+1}")
+        os.makedirs(conf_dir, exist_ok=True)
+        
+        # Premier calcul d'optimisation + fréquences
         s = Settings()
         s.input.ams.Task = "GeometryOptimization"
         s.input.ams.Properties.NormalModes = "Yes"
@@ -362,78 +366,171 @@ def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_
         if freq_functional in METAGGA_FUNCTIONALS or freq_functional in METAHYBRID_FUNCTIONALS:
             s.input.adf.NumericalQuality = "Good"
         
-        # Créer et exécuter le job directement dans le dossier conf_N
-        job_name = f"conf_{i+1}"
+        job_name = f"conf_{i+1}_initial"
         mol_job = AMSJob(molecule=conf, settings=s, name=job_name)
         
         try:
-            # Utiliser DefaultJobManager avec le dossier conf_N comme répertoire de travail
-            with DefaultJobManager(job_dir=freq_dir):
+            # Exécuter le premier calcul
+            with DefaultJobManager(job_dir=conf_dir):
                 mol_result = mol_job.run()
             
-            # Vérifier si le calcul a réussi
             if mol_result.ok():
-                # Lire le fichier de sortie pour extraire les fréquences
-                output_file = os.path.join(freq_dir, job_name, f"{job_name}.out")
+                output_file = os.path.join(conf_dir, job_name, f"{job_name}.out")
                 
                 if os.path.exists(output_file):
-                    # Extraire les fréquences en utilisant un pattern actualisé
-                    import re
-                    with open(output_file, 'r') as f:
-                        content = f.read()
+                    # Extraire les fréquences imaginaires éventuelles
+                    imaginary_modes = extract_imaginary_modes(output_file)
                     
-                    # Rechercher la section de fréquences des modes normaux
-                    freq_section = re.search(r'-+\s*Normal Mode Frequencies\s*-+\s*.*?(?=\s*Zero-point|$)', 
-                                            content, re.DOTALL)
-                    
-                    if freq_section:
-                        # Extraire les lignes contenant les fréquences (en ignorant l'en-tête)
-                        freq_lines = freq_section.group(0).strip().split('\n')
-                        # Ignorer les lignes d'en-tête (généralement 3-4 lignes)
-                        data_lines = [line for line in freq_lines if re.match(r'\s*\d+\s+[-+]?\d+\.\d+', line)]
+                    if not imaginary_modes:
+                        # Pas de fréquence imaginaire dès le premier calcul
+                        print(f"  [V] Conformère {i+1} : toutes les fréquences sont positives")
                         
-                        if data_lines:
-                            # Extraire les fréquences de chaque ligne
-                            frequencies = []
-                            for line in data_lines:
-                                # Matcher la deuxième colonne qui contient la fréquence
-                                match = re.search(r'\s*\d+\s+([-+]?\d+\.\d+)', line)
-                                if match:
-                                    frequencies.append(float(match.group(1)))
-                            
-                            # Vérifier s'il y a des fréquences imaginaires
-                            has_imaginary = any(freq < 0 for freq in frequencies)
-                            
-                            if has_imaginary:
-                                neg_freqs = [f for f in frequencies if f < 0]
-                                print(f"  [X] Conformère {i+1} : fréquences imaginaires détectées")
-                                print(f"     Fréquences imaginaires : {neg_freqs} cm-1")
-                            else:
-                                print(f"  [V] Conformère {i+1} : toutes les fréquences sont positives")
-                                # Récupérer la géométrie optimisée
-                                opt_mol = mol_result.get_main_molecule()
-                                png_file = os.path.join(results_dir, f"{job_name}.png")
-                                plot_molecule(opt_mol)
-                                plt.tight_layout()
-                                plt.savefig(png_file)
-                                
-                                # Enregistrer le conformère valide
-                                valid_conformers.append(opt_mol)
-                                valid_indices.append(i)
-                                
-                                # Sauvegarder la géométrie au format XYZ
-                                xyz_file = os.path.join(results_dir, f"{molecule_name}_conf_{i+1}.xyz")
-                                opt_mol.write(xyz_file)
-                        else:
-                            print(f"  [X] Aucune donnée de fréquence extraite pour le conformère {i+1}")
+                        # Récupérer la géométrie optimisée
+                        opt_mol = mol_result.get_main_molecule()
+                        png_file = os.path.join(results_dir, f"conf_{i+1}.png")
+                        plot_molecule(opt_mol)
+                        plt.tight_layout()
+                        plt.savefig(png_file)
+                        
+                        # Enregistrer le conformère valide
+                        valid_conformers.append(opt_mol)
+                        valid_indices.append(i)
+                        
+                        # Sauvegarder la géométrie au format XYZ
+                        xyz_file = os.path.join(results_dir, f"{molecule_name}_conf_{i+1}.xyz")
+                        opt_mol.write(xyz_file)
+                        
                     else:
-                        print(f"  [X] Section des fréquences non trouvée pour le conformère {i+1}")
+                        # Fréquences imaginaires détectées, tenter de les corriger
+                        freqs = [mode["frequency"] for mode in imaginary_modes]
+                        print(f"  [X] Conformère {i+1} : fréquences imaginaires détectées")
+                        print(f"     Fréquences imaginaires : {freqs} cm-1")
+                        
+                        # Récupérer la molécule optimisée
+                        opt_mol = mol_result.get_main_molecule()
+                        
+                        # Boucle pour tester différentes perturbations
+                        corrected = False
+                        current_attempt = 0
+                        perturbation_scale = 0.5  # Facteur initial
+                        
+                        while not corrected and current_attempt < max_attempts:
+                            current_attempt += 1
+                            print(f"    Tentative {current_attempt}/{max_attempts} de correction (échelle: {perturbation_scale:.2f})...")
+                            
+                            # Trouver le mode avec la fréquence la plus négative
+                            worst_mode = sorted(imaginary_modes, key=lambda x: x["frequency"])[0]
+                            
+                            # Créer deux structures perturbées: positive et négative
+                            pos_perturbed_mol = perturb_molecule(opt_mol, worst_mode, perturbation_scale)
+                            neg_perturbed_mol = perturb_molecule(opt_mol, worst_mode, -perturbation_scale)
+                            
+                            # Exécuter les calculs pour les deux perturbations
+                            success_pos = False
+                            success_neg = False
+                            
+                            # Calcul avec perturbation positive
+                            job_name_pos = f"conf_{i+1}_attempt_{current_attempt}_pos"
+                            mol_job_pos = AMSJob(molecule=pos_perturbed_mol, settings=s, name=job_name_pos)
+                            
+                            with DefaultJobManager(job_dir=conf_dir):
+                                mol_result_pos = mol_job_pos.run()
+                            
+                            if mol_result_pos.ok():
+                                output_file_pos = os.path.join(conf_dir, job_name_pos, f"{job_name_pos}.out")
+                                if os.path.exists(output_file_pos):
+                                    imag_modes_pos = extract_imaginary_modes(output_file_pos)
+                                    if not imag_modes_pos:
+                                        print(f"  [V] Perturbation positive réussie : plus de fréquence imaginaire")
+                                        success_pos = True
+                                        
+                                        # Récupérer la géométrie optimisée
+                                        opt_mol_pos = mol_result_pos.get_main_molecule()
+                                        png_file = os.path.join(results_dir, f"conf_{i+1}.png")
+                                        plot_molecule(opt_mol_pos)
+                                        plt.tight_layout()
+                                        plt.savefig(png_file)
+                                        
+                                        # Enregistrer le conformère valide
+                                        valid_conformers.append(opt_mol_pos)
+                                        valid_indices.append(i)
+                                        
+                                        # Sauvegarder la géométrie au format XYZ
+                                        xyz_file = os.path.join(results_dir, f"{molecule_name}_conf_{i+1}.xyz")
+                                        opt_mol_pos.write(xyz_file)
+                                        
+                                        corrected = True
+                                        break  # Sortir de la boucle while
+                                    else:
+                                        freqs_pos = [mode["frequency"] for mode in imag_modes_pos]
+                                        print(f"  [X] Perturbation positive : encore des fréquences imaginaires")
+                                        print(f"       Fréquences imaginaires : {freqs_pos} cm-1")
+                            
+                            # Si la perturbation positive n'a pas réussi, essayer la négative
+                            if not success_pos:
+                                job_name_neg = f"conf_{i+1}_attempt_{current_attempt}_neg"
+                                mol_job_neg = AMSJob(molecule=neg_perturbed_mol, settings=s, name=job_name_neg)
+                                
+                                with DefaultJobManager(job_dir=conf_dir):
+                                    mol_result_neg = mol_job_neg.run()
+                                
+                                if mol_result_neg.ok():
+                                    output_file_neg = os.path.join(conf_dir, job_name_neg, f"{job_name_neg}.out")
+                                    if os.path.exists(output_file_neg):
+                                        imag_modes_neg = extract_imaginary_modes(output_file_neg)
+                                        if not imag_modes_neg:
+                                            print(f"  [V] Perturbation négative réussie : plus de fréquence imaginaire")
+                                            success_neg = True
+                                            
+                                            # Récupérer la géométrie optimisée
+                                            opt_mol_neg = mol_result_neg.get_main_molecule()
+                                            png_file = os.path.join(results_dir, f"conf_{i+1}.png")
+                                            plot_molecule(opt_mol_neg)
+                                            plt.tight_layout()
+                                            plt.savefig(png_file)
+                                            
+                                            # Enregistrer le conformère valide
+                                            valid_conformers.append(opt_mol_neg)
+                                            valid_indices.append(i)
+                                            
+                                            # Sauvegarder la géométrie au format XYZ
+                                            xyz_file = os.path.join(results_dir, f"{molecule_name}_conf_{i+1}.xyz")
+                                            opt_mol_neg.write(xyz_file)
+                                            
+                                            corrected = True
+                                            break  # Sortir de la boucle while
+                                        else:
+                                            freqs_neg = [mode["frequency"] for mode in imag_modes_neg]
+                                            print(f"  [X] Perturbation négative : encore des fréquences imaginaires")
+                                            print(f"       Fréquences imaginaires : {freqs_neg} cm-1")
+                            
+                            # Si aucune perturbation n'a réussi, augmenter l'échelle pour la prochaine tentative
+                            perturbation_scale += 0.1
+                            
+                            # Utiliser la structure de plus basse énergie pour la prochaine tentative
+                            if mol_result_pos.ok() and mol_result_neg.ok():
+                                energy_pos = mol_result_pos.get_energy()
+                                energy_neg = mol_result_neg.get_energy()
+                                
+                                if energy_pos < energy_neg:
+                                    opt_mol = mol_result_pos.get_main_molecule()
+                                    imaginary_modes = imag_modes_pos if 'imag_modes_pos' in locals() else imaginary_modes
+                                else:
+                                    opt_mol = mol_result_neg.get_main_molecule()
+                                    imaginary_modes = imag_modes_neg if 'imag_modes_neg' in locals() else imaginary_modes
+                            
+                        if not corrected:
+                            print(f"  [X] Conformère {i+1} : impossible de corriger les fréquences imaginaires après {max_attempts} tentatives.")
+                    
                 else:
                     print(f"  [X] Fichier de sortie introuvable pour le conformère {i+1}")
             else:
-                print(f"  [X] Le calcul du conformère {i+1} a échoué")
+                print(f"  [X] Le calcul initial du conformère {i+1} a échoué")
+                
         except Exception as e:
+            import traceback
             print(f"  [X] Erreur lors de l'analyse du conformère {i+1}: {str(e)}")
+            print(traceback.format_exc())
     
     # Créer un fichier de résumé
     summary_file = os.path.join(results_dir, "conformers_summary.txt")
@@ -452,6 +549,96 @@ def verify_frequencies(previous_job, molecule_name, results_dir, calc_dir, freq_
             f.write("Aucun conformère valide trouvé (tous ont des fréquences imaginaires)\n")
     
     return valid_conformers
+
+
+def extract_imaginary_modes(output_file):
+    """
+    Extrait les modes normaux à fréquence imaginaire du fichier de sortie.
+
+    Args:
+        output_file (str): Chemin vers le fichier de sortie du calcul
+
+    Returns:
+        list: Liste des modes imaginaires, chacun contenant fréquence et déplacements atomiques
+    """
+    imaginary_modes = []
+
+    with open(output_file, 'r') as f:
+        content = f.read()
+
+    # Utiliser la regex fournie pour trouver tous les modes à fréquence négative
+    pattern = r' Mode:\s+(\d+)\s+Frequency \(cm-1\):\s+([-]\d+\.\d+)\s+Intensity \(km\/mol\):\s+\d+\.\d+\s*\n Index\s+Atom\s+\-+ Displacements \(x\/y\/z\) \-+\n((?:\s+\d+\s+\w+\s+[-]?\d+\.\d+\s+[-]?\d+\.\d+\s+[-]?\d+\.\d+\s*\n)+)'
+
+    # Trouver tous les modes à fréquence négative
+    for match in re.finditer(pattern, content):
+        mode_num = int(match.group(1))
+        frequency = float(match.group(2))  # Déjà négatif par construction du pattern
+        displacements_text = match.group(3)
+
+        # Traiter les déplacements atomiques
+        mode_displacements = []
+        for line in displacements_text.strip().split('\n'):
+            parts = line.split()
+            if len(parts) >= 5:  # Format attendu: index, symbole, x, y, z
+                atom_index = int(parts[0])
+                atom_symbol = parts[1]
+                x = float(parts[2])
+                y = float(parts[3])
+                z = float(parts[4])
+
+                mode_displacements.append({
+                    'index': atom_index,
+                    'symbol': atom_symbol,
+                    'displacements': (x, y, z)
+                })
+
+        # Ajouter ce mode imaginaire à notre liste
+        imaginary_modes.append({
+            'mode': mode_num,
+            'frequency': frequency,
+            'displacements': mode_displacements
+        })
+
+    return imaginary_modes
+
+
+def perturb_molecule(molecule, mode_info, scale_factor=0.5):
+    """
+    Crée une nouvelle géométrie moléculaire en perturbant la structure initiale le long d'un mode normal.
+
+    Args:
+        molecule (Molecule): L'objet Molecule à perturber
+        mode_info (dict): Informations sur le mode normal (fréquence et déplacements)
+        scale_factor (float): Facteur d'échelle pour le déplacement (positif)
+
+    Returns:
+        Molecule: Nouvelle molécule avec géométrie perturbée
+    """
+    # Créer une copie profonde de la molécule
+    perturbed_mol = molecule.copy()
+
+    # Appliquer les déplacements
+    for atom_info in mode_info['displacements']:
+        atom_index = atom_info['index'] - 1  # PLAMS utilise des indices commençant à 0
+        dx, dy, dz = atom_info['displacements']
+
+        # Coordonnées actuelles de l'atome
+        current_coords = perturbed_mol.atoms[atom_index].coords
+
+        # Nouvelles coordonnées (perturbées dans la direction du mode)
+        # Pour les modes imaginaires, on perturbe dans le sens positif du vecteur
+        # car on cherche à "sortir" du point selle
+        new_coords = (
+            current_coords[0] + scale_factor * dx,
+            current_coords[1] + scale_factor * dy,
+            current_coords[2] + scale_factor * dz
+        )
+
+        # Mettre à jour les coordonnées
+        perturbed_mol.atoms[atom_index].coords = new_coords
+
+    return perturbed_mol
+
 
 def main():
     """Fonction principale du programme."""
@@ -477,11 +664,11 @@ def main():
         print("   Vérifiez que le SMILES est valide et que RDKit est correctement installé.")
 
     print("\nParamètres de calcul:")
-    print(f"  Étape 2 : Optimisation      - E window: {args.e_window_opt} kJ/mol")
+    print(f"  Étape 2 : Optimisation      - E window: {args.e_window_opt} kcal/mol")
     print(f"  Étape 3 : Scoring           - Méthode: {args.functional}/{args.basis}")
-    print(f"  Étape 3 : Scoring           - E window: {args.e_window_score} kJ/mol")
+    print(f"  Étape 3 : Scoring           - E window: {args.e_window_score} kcal/mol")
     print(f"  Étape 3 : Scoring           - Dispersion: {args.dispersion}")
-    print(f"  Étape 4 : Filtrage          - E window: {args.e_window_filter} kJ/mol")
+    print(f"  Étape 4 : Filtrage          - E window: {args.e_window_filter} kcal/mol")
     print(f"  Étape 4 : Filtrage          - RMSD: {args.rmsd_threshold} Å")
     print(f"  Étape 5 : Fréquences        - Méthode: {args.freq_functional}/{args.freq_basis}")
 
@@ -501,7 +688,7 @@ def main():
         summary_file = os.path.join(calc_dir, "filter_summary.txt")
         with open(summary_file, "w") as f:
             f.write(f"# Conformères après filtrage pour {args.name}\n")
-            f.write(f"# Critères de filtrage: E window = {args.e_window_filter} kJ/mol, RMSD = {args.rmsd_threshold} Å\n")
+            f.write(f"# Critères de filtrage: E window = {args.e_window_filter} kcal/mol, RMSD = {args.rmsd_threshold} Å\n")
             f.write(f"# Température: {TEMPERATURE} K\n\n")
             f.write(f"{'#':>3s} {'Delta E [kJ/mol]':>16s} {'Poids Boltzmann':>16s}\n")
 
@@ -534,7 +721,7 @@ def main():
             f.write(f"# Conformères après filtrage Boltzmann pour {args.name}\n")
             f.write(f"# Seuil de poids: {weight_threshold}\n")
             f.write(f"# Température: {TEMPERATURE} K\n\n")
-            f.write(f"{'#':>3s} {'Index original':>16s} {'Delta E [kJ/mol]':>16s} {'Poids Boltzmann':>16s}\n")
+            f.write(f"{'#':>3s} {'Index original':>16s} {'Delta E [kcal/mol]':>16s} {'Poids Boltzmann':>16s}\n")
 
             for j, i in enumerate(filtered_indices):
                 f.write(f"{j+1:3d} {i+1:16d} {energies[i]:16.4f} {weights[i]:16.8f}\n")
