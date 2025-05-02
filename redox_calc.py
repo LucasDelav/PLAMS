@@ -207,7 +207,7 @@ def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", bas
     settings = setup_adf_settings(task="SinglePoint", charge=-1, spin_polarization=1.0, 
                                  solvent=solvent, functional=functional, basis=basis)
     
-    job = AMSJob(settings=settings, name=f"{name}_reduit_sp", molecule=mol_opt)
+    job = AMSJob(settings=settings, name=f"{name}_réduit_sp", molecule=mol_opt)
     job.run()
     
     if job.check():
@@ -217,7 +217,7 @@ def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", bas
         print(f"  ERREUR: Calcul simple point échoué pour {name} (réduit)")
         return None
 
-def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
+def optimize_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
     """
     Étape 3: Optimisation géométrique de la molécule réduite (charge -1)
     
@@ -232,13 +232,13 @@ def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", ba
         AMSJob: Job d'optimisation terminé ou None en cas d'échec
     """
     # Récupérer la molécule réduite du calcul single point
-    mol_opt = job_sp.results.get_main_molecule()
+    mol_opt = job_neutral.results.get_main_molecule()
     
     print(f"\nÉtape 3: Optimisation géométrique de {name} (réduit, charge -1)")
     settings = setup_adf_settings(task="GeometryOptimization", charge=-1, spin_polarization=1.0, 
                                  solvent=solvent, functional=functional, basis=basis)
     
-    job = AMSJob(settings=settings, name=f"{name}_reduit_opt", molecule=mol_opt)
+    job = AMSJob(settings=settings, name=f"{name}_réduit_opt", molecule=mol_opt)
     job.run()
     
     if job.check():
@@ -247,6 +247,69 @@ def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", ba
     else:
         print(f"  ERREUR: Optimisation réduite échouée pour {name}")
         return None
+
+def sp_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
+    """
+    Étape 4: Calcul en simple point de la molécule oxidé (charge +1)
+    
+    Args:
+        job_neutral (AMSJob): Job d'optimisation de la molécule neutre
+        name (str): Nom de base pour le job
+        solvent (str): Solvant à utiliser
+        functional (str): Fonctionnelle DFT
+        basis (str): Base à utiliser
+        
+    Returns:
+        AMSJob: Job de single point terminé ou None en cas d'échec
+    """
+    # Récupérer la molécule optimisée de l'étape 1
+    mol_opt = job_neutral.results.get_main_molecule()
+    
+    print(f"\nÉtape 4: Calcul en simple point de {name} (oxidé, charge +1)")
+    settings = setup_adf_settings(task="SinglePoint", charge=1, spin_polarization=1.0, 
+                                 solvent=solvent, functional=functional, basis=basis)
+    
+    job = AMSJob(settings=settings, name=f"{name}_oxidé_sp", molecule=mol_opt)
+    job.run()
+    
+    if job.check():
+        print(f"  Calcul simple point réussi pour {name} (oxidé)")
+        return job
+    else:
+        print(f"  ERREUR: Calcul simple point échoué pour {name} (oxidé)")
+        return None
+
+def optimize_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
+    """
+    Étape 5: Optimisation géométrique de la molécule oxidé (charge +1)
+    
+    Args:
+        job_sp (AMSJob): Job de single point de la molécule réduite
+        name (str): Nom de base pour le job
+        solvent (str): Solvant à utiliser
+        functional (str): Fonctionnelle DFT
+        basis (str): Base à utiliser
+        
+    Returns:
+        AMSJob: Job d'optimisation terminé ou None en cas d'échec
+    """
+    # Récupérer la molécule réduite du calcul single point
+    mol_opt = job_neutral.results.get_main_molecule()
+    
+    print(f"\nÉtape 5: Optimisation géométrique de {name} (oxidé, charge +1)")
+    settings = setup_adf_settings(task="GeometryOptimization", charge=1, spin_polarization=1.0, 
+                                 solvent=solvent, functional=functional, basis=basis)
+    
+    job = AMSJob(settings=settings, name=f"{name}_oxidé_opt", molecule=mol_opt)
+    job.run()
+    
+    if job.check():
+        print(f"  Optimisation oxidé réussie pour {name}")
+        return job
+    else:
+        print(f"  ERREUR: Optimisation oxidé échouée pour {name}")
+        return None
+
 
 def kabsch_rmsd(mol1, mol2):
     """
@@ -316,7 +379,8 @@ def compare_conformers_rmsd(job_results):
                rmsd_export_data: Données formatées pour l'export
     """
     rmsd_results = {}
-    rmsd_summary = []  # Pour stocker les résultats à exporter
+    reduced_rmsd_summary = []  # Pour stocker les résultats des conformères réduits
+    oxidized_rmsd_summary = []  # Pour stocker les résultats des conformères oxidés
     rmsd_warnings = []  # Pour stocker les avertissements
 
     # Liste des noms de tous les conformères
@@ -328,7 +392,10 @@ def compare_conformers_rmsd(job_results):
 
     # Pour chaque conformère réduit
     for reduced_name in conformer_names:
-        reduced_job = job_results[reduced_name]['opt']
+        if 'réduit_opt' not in job_results[reduced_name]:
+            continue
+
+        reduced_job = job_results[reduced_name]['réduit_opt']
         if not reduced_job or not reduced_job.ok():
             continue
 
@@ -336,11 +403,14 @@ def compare_conformers_rmsd(job_results):
         rmsd_results[reduced_name] = {}
 
         # Comparer avec tous les neutres
-        min_rmsd_value = float('inf')
-        min_rmsd_name = None
+        min_reduced_rmsd_value = float('inf')
+        min_reduced_rmsd_name = None
 
         for neutral_name in conformer_names:
-            neutral_job = job_results[neutral_name]['neutral']
+            if 'neutre_opt' not in job_results[neutral_name]:
+                continue
+
+            neutral_job = job_results[neutral_name]['neutre_opt']
             if not neutral_job or not neutral_job.ok():
                 continue
 
@@ -352,31 +422,92 @@ def compare_conformers_rmsd(job_results):
                 rmsd_results[reduced_name][neutral_name] = rmsd
 
                 # Garder trace du RMSD minimum
-                if rmsd < min_rmsd_value:
-                    min_rmsd_value = rmsd
-                    min_rmsd_name = neutral_name
+                if rmsd < min_reduced_rmsd_value:
+                    min_reduced_rmsd_value = rmsd
+                    min_reduced_rmsd_name = neutral_name
 
             except Exception as e:
                 print(f"Erreur lors du calcul RMSD entre {reduced_name} et {neutral_name}: {str(e)}")
                 rmsd_results[reduced_name][neutral_name] = float('inf')
 
         # Ajouter le meilleur résultat au résumé
-        if min_rmsd_name:
-            rmsd_summary.append((reduced_name, min_rmsd_name, min_rmsd_value))
+        if min_reduced_rmsd_name:
+            reduced_rmsd_summary.append((reduced_name, min_reduced_rmsd_name, min_reduced_rmsd_value))
 
             # Déterminer si c'est un changement de conformère
-            if reduced_name != min_rmsd_name:
-                warning = f"ATTENTION: Le conformère réduit {reduced_name} correspond mieux au conformère neutre {min_rmsd_name} (RMSD: {min_rmsd_value:.4f} Å)"
+            if reduced_name != min_reduced_rmsd_name:
+                warning = f"ATTENTION: Le conformère réduit {reduced_name} correspond mieux au conformère neutre {min_reduced_rmsd_name} (RMSD: {min_reduced_rmsd_value:.4f} Å)"
                 rmsd_warnings.append(warning)
                 print(warning)
             else:
                 # Vérifier si le RMSD est élevé même pour le même conformère
-                if min_rmsd_value > 0.3:  # Seuil arbitraire, à ajuster selon vos molécules
-                    warning = f"ATTENTION: Le conformère réduit {reduced_name} présente un RMSD élevé ({min_rmsd_value:.4f} Å) par rapport à son conformère neutre"
+                if min_reduced_rmsd_value > 0.5:  # Seuil arbitraire, à ajuster selon vos molécules
+                    warning = f"ATTENTION: Le conformère réduit {reduced_name} présente un RMSD élevé ({min_reduced_rmsd_value:.4f} Å) par rapport à son conformère neutre"
                     rmsd_warnings.append(warning)
                     print(warning)
                 else:
-                    msg = f"Le conformère réduit {reduced_name} correspond bien à son conformère neutre (RMSD: {min_rmsd_value:.4f} Å)"
+                    msg = f"Le conformère réduit {reduced_name} correspond bien à son conformère neutre (RMSD: {min_reduced_rmsd_value:.4f} Å)"
+                    rmsd_warnings.append(msg)
+                    print(msg)
+
+    # Pour chaque conformère oxidé
+    for oxidized_name in conformer_names:
+        if 'oxidé_opt' not in job_results[oxidized_name]:
+            continue
+
+        oxidized_job = job_results[oxidized_name]['oxidé_opt']
+        if not oxidized_job or not oxidized_job.ok():
+            continue
+
+        oxidized_mol = oxidized_job.results.get_main_molecule()
+        if oxidized_name not in rmsd_results:
+            rmsd_results[oxidized_name] = {}
+
+        # Comparer avec tous les neutres
+        min_oxidized_rmsd_value = float('inf')
+        min_oxidized_rmsd_name = None
+
+        for neutral_name in conformer_names:
+            if 'neutre_opt' not in job_results[neutral_name]:
+                continue
+
+            neutral_job = job_results[neutral_name]['neutre_opt']
+            if not neutral_job or not neutral_job.ok():
+                continue
+
+            neutral_mol = neutral_job.results.get_main_molecule()
+
+            # Calculer le RMSD
+            try:
+                rmsd = kabsch_rmsd(oxidized_mol, neutral_mol)
+                rmsd_results[oxidized_name][neutral_name] = rmsd
+
+                # Garder trace du RMSD minimum
+                if rmsd < min_oxidized_rmsd_value:
+                    min_oxidized_rmsd_value = rmsd
+                    min_oxidized_rmsd_name = neutral_name
+
+            except Exception as e:
+                print(f"Erreur lors du calcul RMSD entre {oxidized_name} et {neutral_name}: {str(e)}")
+                rmsd_results[oxidized_name][neutral_name] = float('inf')
+
+        # Ajouter le meilleur résultat au résumé
+        if min_oxidized_rmsd_name:
+            oxidized_rmsd_summary.append((oxidized_name, min_oxidized_rmsd_name, min_oxidized_rmsd_value))
+
+            # Déterminer si c'est un changement de conformère
+            if oxidized_name != min_oxidized_rmsd_name:
+                warning = f"ATTENTION: Le conformère oxidé {oxidized_name} correspond mieux au conformère neutre {min_oxidized_rmsd_name} (RMSD: {min_oxidized_rmsd_value:.4f} Å)"
+                rmsd_warnings.append(warning)
+                print(warning)
+            else:
+                # Vérifier si le RMSD est élevé même pour le même conformère
+                if min_oxidized_rmsd_value > 0.5:  # Seuil arbitraire, à ajuster selon vos molécules
+                    warning = f"ATTENTION: Le conformère oxidé {oxidized_name} présente un RMSD élevé ({min_oxidized_rmsd_value:.4f} Å) par rapport à son conformère neutre"
+                    rmsd_warnings.append(warning)
+                    print(warning)
+                else:
+                    msg = f"Le conformère oxidé {oxidized_name} correspond bien à son conformère neutre (RMSD: {min_oxidized_rmsd_value:.4f} Å)"
                     rmsd_warnings.append(msg)
                     print(msg)
 
@@ -387,12 +518,20 @@ def compare_conformers_rmsd(job_results):
     print(f"{'Conformère réduit':<25} {'Conformère neutre le plus proche':<30} {'RMSD (Å)':<10}")
     print("-"*70)
 
-    for reduced_name, neutral_name, rmsd_value in rmsd_summary:
-        print(f"{reduced_name:<25} {neutral_name:<30} {rmsd_value:.4f}")
+    for reduced_name, min_reduced_rmsd_name, min_reduced_rmsd_value in reduced_rmsd_summary:
+        print(f"{reduced_name:<25} {min_reduced_rmsd_name:<30} {min_reduced_rmsd_value:.4f}")
+
+    print("-"*70)
+    print(f"{'Conformère oxidé':<25} {'Conformère neutre le plus proche':<30} {'RMSD (Å)':<10}")
+    print("-"*70)
+
+    for oxidized_name, min_oxidized_rmsd_name, min_oxidized_rmsd_value in oxidized_rmsd_summary:
+        print(f"{oxidized_name:<25} {min_oxidized_rmsd_name:<30} {min_oxidized_rmsd_value:.4f}")
 
     # Créer le dictionnaire d'export
     rmsd_export_data = {
-        'summary': rmsd_summary,
+        'summary_reduced': reduced_rmsd_summary,
+        'summary_oxidized': oxidized_rmsd_summary,
         'warnings': rmsd_warnings
     }
 
@@ -422,7 +561,7 @@ def export_molecules(jobs_data, prefix="redox_results"):
             if not all(jobs.values()):
                 continue
 
-            # Traiter chaque type de job (neutral, sp, opt)
+            # Traiter chaque type de job (neutral, reduced_sp, reduced_opt, oxidized_sp, oxidized_opt)
             for job_type, job in jobs.items():
                 # Construire le chemin du fichier source
                 out_file = os.path.join(job.path, f"{job.name}.out")
@@ -516,7 +655,7 @@ def extract_engine_energies(workdir_parent):
             return energy_results
 
         # En-tête du tableau
-        print(f"{'Fichier':<30} {'Engine Energy':<15} {'Internal Energy U':<15} {'-T*S':<15} {'Gibbs Energy':<15} {'HOMO (eV)':<15} {'LUMO (eV)':<15}")
+        print(f"{'Fichier':<30} {'Ee':<25} {'U':<25} {'-T*S':<15} {'Gibbs Energy':<15} {'HOMO (eV)':<15} {'LUMO (eV)':<15}")
         print("-"*120)
 
         # Analyser chaque fichier .out
@@ -596,468 +735,392 @@ def extract_engine_energies(workdir_parent):
 def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=None):
     """
     Analyse les valeurs d'énergie extraites et calcule les paramètres redox.
-
-    Args:
-        energy_data (dict): Dictionnaire contenant les énergies extraites par fichier
-        temperature (float): Température en K (par défaut: 298.15K)
-        rmsd_export_data (dict, optional): Données RMSD à inclure dans le fichier d'export
     """
+    # Constante énergétique
+    F = 96.48533212  # Constante de Faraday en kC/mol
+    R = 8.314462618  # Constante des gaz parfaits en J/(mol·K)
+
+    print("\n" + "="*80)
+    print("ANALYSE ÉNERGÉTIQUE DU PROCESSUS REDOX")
+    print("="*80)
+
     try:
-        import math
-        import re
-        import os
-        from scm.plams import config
-
-        # Constantes
-        R = 8.314462618e-3  # Constante des gaz parfaits en kJ/(mol·K)
-        RT = R * temperature  # kJ/mol à 298.15K ≈ 2.48 kJ/mol
-        F = 96.485  # Constante de Faraday en kJ/(mol·V)
-
-        print("\n" + "="*80)
-        print("ANALYSE ÉNERGÉTIQUE DU PROCESSUS REDOX")
-        print("="*80)
-
-        # Vérifier si energy_data est vide
-        if not energy_data:
-            print("ERREUR: Aucune donnée d'énergie fournie (energy_data est vide)")
-            return {}, {}, {}, {}
-
-        # Initialiser les structures de données résultantes
-        avg_params = {}
-        potentials = {}
+        # Initialiser les dictionnaires pour stocker les résultats
+        conformers_data = {}
         redox_parameters = {}
+        avg_params = {}
+        potentials = {
+            'reduction': {},
+            'oxidation': {}
+        }
         boltzmann_weights = {}
 
-        # Organiser les données par conformères et type de calcul
-        try:
-            conformers_data = {}
-            pattern = r'(.+?)_(neutral|sp|opt)\.out'
+        # Modifier le pattern regex pour correspondre à vos noms de fichiers réels
+        pattern = r'(.+?)_(neutre|réduit|oxidé)_(opt|sp)\.out'
 
-            for filename, energies in energy_data.items():
-                try:
-                    match = re.search(pattern, filename)
-                    if not match:
-                        print(f"AVERTISSEMENT: Le fichier {filename} ne correspond pas au format attendu")
-                        continue
+        # Extraire les informations de chaque fichier
+        for filename, energies in energy_data.items():
+            match = re.match(pattern, filename)
+            if not match:
+                print(f"Format de nom de fichier non reconnu: {filename}")
+                continue
 
-                    conformer = match.group(1)
-                    calc_type = match.group(2)
+            conformer = match.group(1)
+            calc_type = match.group(2)  # 'neutre', 'réduit', ou 'oxidé'
+            job_type = match.group(3)   # 'opt' ou 'sp'
 
-                    if conformer not in conformers_data:
-                        conformers_data[conformer] = {}
+            # Convertir en clé standardisée
+            if calc_type == 'neutre':
+                standardized_calc_type = 'neutral'
+            elif calc_type == 'réduit':
+                standardized_calc_type = 'reduced' if job_type == 'sp' else 'reduced_opt'
+            elif calc_type == 'oxidé':
+                standardized_calc_type = 'oxidized' if job_type == 'sp' else 'oxidized_opt'
+            else:
+                continue
 
-                    conformers_data[conformer][calc_type] = energies
-                except Exception as e:
-                    print(f"ERREUR lors du traitement du fichier {filename}: {str(e)}")
+            # Initialiser le dictionnaire pour ce conformère si nécessaire
+            if conformer not in conformers_data:
+                conformers_data[conformer] = {}
 
-            if not conformers_data:
-                print("ERREUR: Aucun fichier n'a pu être correctement analysé")
-                return {}, {}, {}, {}
-        except Exception as e:
-            print(f"ERREUR lors de l'organisation des données: {str(e)}")
+            # Ajouter les données d'énergie pour ce calcul
+            conformers_data[conformer][standardized_calc_type] = energies
+
+        # Vérifier quels conformères ont toutes les données nécessaires
+        required_calc_types = ['neutral', 'reduced', 'reduced_opt', 'oxidized', 'oxidized_opt']
+        complete_conformers = []
+
+        for conformer, calcs in conformers_data.items():
+            all_energies_available = True
+            # Vérifier que tous les types de calcul sont disponibles
+            for calc_type in required_calc_types:
+                if calc_type not in calcs:
+                    print(f"Conformère {conformer} manque le calcul {calc_type}")
+                    all_energies_available = False
+                    break
+                # Vérifier que toutes les énergies sont disponibles pour ce calcul
+                for energy_type in ['Ee', 'U', 'TS', 'G']:
+                    if calcs[calc_type][energy_type] is None:
+                        print(f"Conformère {conformer}, calcul {calc_type} manque l'énergie {energy_type}")
+                        all_energies_available = False
+                        break
+
+            if all_energies_available:
+                complete_conformers.append(conformer)
+
+        # Cette partie était indentée incorrectement et faisait partie de la boucle
+        if not complete_conformers:
+            print("ERREUR: Aucun conformère n'a tous les calculs nécessaires avec toutes les énergies")
             return {}, {}, {}, {}
 
-        # Vérifier quels conformères ont tous les calculs nécessaires
-        try:
-            complete_conformers = []
-            for conformer, calcs in conformers_data.items():
-                if all(calc_type in calcs for calc_type in ['neutral', 'sp', 'opt']):
-                    try:
-                        all_energies_available = True
-                        for calc_type in ['neutral', 'sp', 'opt']:
-                            if (calcs[calc_type]['Ee'] is None or calcs[calc_type]['U'] is None or
-                                calcs[calc_type]['TS'] is None or calcs[calc_type]['G'] is None):
-                                all_energies_available = False
-                                missing = []
-                                if calcs[calc_type]['Ee'] is None: missing.append('Ee')
-                                if calcs[calc_type]['U'] is None: missing.append('U')
-                                if calcs[calc_type]['TS'] is None: missing.append('TS')
-                                if calcs[calc_type]['G'] is None: missing.append('G')
-                                print(f"AVERTISSEMENT: Énergies manquantes pour {conformer}_{calc_type}: {', '.join(missing)}")
-                                break
-
-                        if all_energies_available:
-                            complete_conformers.append(conformer)
-                    except KeyError as e:
-                        print(f"ERREUR: Clé manquante pour {conformer}: {str(e)}")
-                else:
-                    missing = [t for t in ['neutral', 'sp', 'opt'] if t not in calcs]
-                    print(f"AVERTISSEMENT: Types de calcul manquants pour {conformer}: {', '.join(missing)}")
-
-            if not complete_conformers:
-                print("ERREUR: Aucun conformère n'a tous les calculs nécessaires avec toutes les énergies")
-                return {}, {}, {}, {}
-
-            print(f"Nombre de conformères complets: {len(complete_conformers)}")
-            print(f"Conformères à analyser: {', '.join(complete_conformers)}")
-        except Exception as e:
-            print(f"ERREUR lors de la vérification des conformères: {str(e)}")
-            return {}, {}, {}, {}
+        print(f"Conformères complets à analyser: {', '.join(complete_conformers)}")
 
         # Calculer Delta U pour chaque cas
-        try:
-            for conformer in complete_conformers:
-                for calc_type in ['neutral', 'sp', 'opt']:
-                    try:
-                        energies = conformers_data[conformer][calc_type]
-                        if energies['Ee'] is not None and energies['U'] is not None:
-                            energies['delta_U'] = energies['U'] - energies['Ee']
-                        else:
-                            energies['delta_U'] = 0.0
-                            print(f"AVERTISSEMENT: Impossible de calculer delta_U pour {conformer}_{calc_type}")
-                    except Exception as e:
-                        print(f"ERREUR lors du calcul de Delta U pour {conformer}_{calc_type}: {str(e)}")
-                        energies['delta_U'] = 0.0
-        except Exception as e:
-            print(f"ERREUR lors du calcul des Delta U: {str(e)}")
+        for conformer in complete_conformers:
+            for calc_type in required_calc_types:
+                energies = conformers_data[conformer][calc_type]
+                if energies['Ee'] is not None and energies['U'] is not None:
+                    energies['delta_U'] = energies['U'] - energies['Ee']
+                else:
+                    energies['delta_U'] = 0.0
 
         # Calculer les paramètres redox pour chaque conformère
-        try:
-            for conformer in complete_conformers:
-                try:
-                    neutral_data = conformers_data[conformer]['neutral']
-                    sp_data = conformers_data[conformer]['sp']
-                    opt_data = conformers_data[conformer]['opt']
+        for conformer in complete_conformers:
+            neutral = conformers_data[conformer]['neutral']
+            red_sp = conformers_data[conformer]['reduced']
+            red_opt = conformers_data[conformer]['reduced_opt']
+            ox_sp = conformers_data[conformer]['oxidized']
+            ox_opt = conformers_data[conformer]['oxidized_opt']
 
-                    try:
-                        delta_G = opt_data['G'] - neutral_data['G']
-                    except (TypeError, KeyError):
-                        delta_G = 0.0
-                        print(f"ERREUR: Impossible de calculer delta_G pour {conformer}")
+            # Calcul pour le processus de réduction
+            red_params = {}
 
-                    try:
-                        EA = sp_data['Ee'] - neutral_data['Ee']
-                    except (TypeError, KeyError):
-                        EA = 0.0
-                        print(f"ERREUR: Impossible de calculer EA pour {conformer}")
+            # Calcul des paramètres énergétiques de base
+            red_params['delta_G'] = red_opt['G'] - neutral['G']
+            red_params['EA'] = red_sp['Ee'] - neutral['Ee']
+            red_params['Edef'] = red_opt['Ee'] - red_sp['Ee']
+            red_params['delta_delta_U'] = red_opt['delta_U'] - neutral['delta_U']
+            red_params['T_delta_S'] = red_opt['TS'] - neutral['TS']
 
-                    try:
-                        Edef = opt_data['Ee'] - sp_data['Ee']
-                    except (TypeError, KeyError):
-                        Edef = 0.0
-                        print(f"ERREUR: Impossible de calculer Edef pour {conformer}")
+            # Calcul pour le processus d'oxydation
+            ox_params = {}
 
-                    try:
-                        delta_delta_U = opt_data['delta_U'] - neutral_data['delta_U']
-                    except (TypeError, KeyError):
-                        delta_delta_U = 0.0
-                        print(f"ERREUR: Impossible de calculer delta_delta_U pour {conformer}")
+            # Paramètres énergétiques pour l'oxydation
+            ox_params['delta_G'] = ox_opt['G'] - neutral['G']
+            ox_params['IP'] = ox_sp['Ee'] - neutral['Ee']  # Potentiel d'ionisation
+            ox_params['Edef'] = ox_opt['Ee'] - ox_sp['Ee']
+            ox_params['delta_delta_U'] = ox_opt['delta_U'] - neutral['delta_U']
+            ox_params['T_delta_S'] = ox_opt['TS'] - neutral['TS']
 
-                    try:
-                        T_delta_S = opt_data['TS'] - neutral_data['TS']
-                    except (TypeError, KeyError):
-                        T_delta_S = 0.0
-                        print(f"ERREUR: Impossible de calculer T_delta_S pour {conformer}")
-
-                    redox_parameters[conformer] = {
-                        'delta_G': delta_G,
-                        'EA': EA,
-                        'Edef': Edef,
-                        'delta_delta_U': delta_delta_U,
-                        'T_delta_S': T_delta_S
-                    }
-                except Exception as e:
-                    print(f"ERREUR lors du calcul des paramètres redox pour {conformer}: {str(e)}")
-
-            if not redox_parameters:
-                print("ERREUR: Aucun paramètre redox n'a pu être calculé")
-                return {}, {}, {}, {}
-        except Exception as e:
-            print(f"ERREUR lors du calcul des paramètres redox: {str(e)}")
-            return {}, {}, {}, {}
+            # Stocker les paramètres calculés
+            redox_parameters[conformer] = {
+                'reduction': red_params,
+                'oxidation': ox_params
+            }
 
         # Calculer les poids de Boltzmann en fonction des énergies de Gibbs des conformères neutres
         try:
-            try:
-                min_G = min([conformers_data[conf]['neutral']['G']
-                             for conf in complete_conformers
-                             if conformers_data[conf]['neutral']['G'] is not None])
-            except ValueError:
-                print("AVERTISSEMENT: Aucune valeur G valide trouvée pour le calcul de Boltzmann")
-                # Attribuer un poids égal à tous les conformères
-                for conformer in complete_conformers:
-                    boltzmann_weights[conformer] = 1.0 / len(complete_conformers)
-                return avg_params, potentials, redox_parameters, boltzmann_weights
+            # Trouver l'énergie de Gibbs minimum parmi tous les conformères
+            min_G = min(conformers_data[conf]['neutral']['G'] for conf in complete_conformers
+                       if conformers_data[conf]['neutral']['G'] is not None)
 
+            # Calculer les facteurs de Boltzmann
             denominator = 0.0
             for conformer in complete_conformers:
-                try:
-                    G = conformers_data[conformer]['neutral']['G']
-                    if G is not None:
-                        rel_G = G - min_G
-                        try:
-                            boltzmann_factor = math.exp(-rel_G/(R*temperature))
-                            boltzmann_weights[conformer] = boltzmann_factor
-                            denominator += boltzmann_factor
-                        except OverflowError:
-                            print(f"AVERTISSEMENT: Overflow pour {conformer}, rel_G = {rel_G}")
-                            boltzmann_weights[conformer] = 0.0
-                    else:
-                        print(f"AVERTISSEMENT: G est None pour {conformer}, attribution d'un poids nul")
-                        boltzmann_weights[conformer] = 0.0
-                except Exception as e:
-                    print(f"ERREUR lors du calcul du facteur de Boltzmann pour {conformer}: {str(e)}")
+                G = conformers_data[conformer]['neutral']['G']
+                if G is not None:
+                    rel_G = G - min_G
+                    # Conversion kJ/mol en J/mol pour correspondre à R
+                    rel_G_joules = rel_G * 1000
+                    boltzmann_factor = math.exp(-rel_G_joules / (R * temperature))
+                    boltzmann_weights[conformer] = boltzmann_factor
+                    denominator += boltzmann_factor
+                else:
                     boltzmann_weights[conformer] = 0.0
 
-            # Vérifier si le dénominateur est non nul
-            if denominator <= 0:
-                print("AVERTISSEMENT: La somme des facteurs de Boltzmann est nulle ou négative")
-                # Attribuer un poids égal à tous les conformères
-                for conformer in complete_conformers:
-                    boltzmann_weights[conformer] = 1.0 / len(complete_conformers)
-            else:
-                # Normaliser les poids
+            # Normaliser les poids
+            if denominator > 0:
                 for conformer in complete_conformers:
                     boltzmann_weights[conformer] /= denominator
+            else:
+                # Si problème, attribuer poids égaux
+                for conformer in complete_conformers:
+                    boltzmann_weights[conformer] = 1.0 / len(complete_conformers)
+
         except Exception as e:
             print(f"ERREUR lors du calcul des poids de Boltzmann: {str(e)}")
-            # Attribuer un poids égal à tous les conformères
+            # Attribuer poids égaux en cas d'erreur
             for conformer in complete_conformers:
                 boltzmann_weights[conformer] = 1.0 / len(complete_conformers)
 
-        # Calculer les moyennes pondérées
-        try:
-            avg_params = {
-                'delta_G': 0.0,
-                'EA': 0.0,
-                'Edef': 0.0,
-                'delta_delta_U': 0.0,
-                'T_delta_S': 0.0
-            }
+        # Le reste de la fonction reste identique...
+        # Calculer les moyennes pondérées pour la réduction
+        avg_params_red = {
+            'delta_G': 0.0,
+            'EA': 0.0,
+            'Edef': 0.0,
+            'delta_delta_U': 0.0,
+            'T_delta_S': 0.0
+        }
 
-            for conformer in complete_conformers:
-                weight = boltzmann_weights[conformer]
-                for param in avg_params:
-                    try:
-                        avg_params[param] += weight * redox_parameters[conformer][param]
-                    except Exception as e:
-                        print(f"ERREUR lors du calcul de la moyenne pour {param} de {conformer}: {str(e)}")
+        # Calculer les moyennes pondérées pour l'oxydation
+        avg_params_ox = {
+            'delta_G': 0.0,
+            'IP': 0.0,
+            'Edef': 0.0,
+            'delta_delta_U': 0.0,
+            'T_delta_S': 0.0
+        }
 
-            # Vérifier l'égalité thermodynamique
-            try:
-                equality_check = avg_params['EA'] + avg_params['Edef'] + avg_params['delta_delta_U'] + avg_params['T_delta_S']
-                equality_diff = avg_params['delta_G'] - equality_check
-            except Exception as e:
-                print(f"ERREUR lors de la vérification thermodynamique: {str(e)}")
-                equality_check = 0.0
-                equality_diff = 0.0
-        except Exception as e:
-            print(f"ERREUR lors du calcul des moyennes: {str(e)}")
-            return {}, {}, {}, {}
+        # Calculer les moyennes pondérées en utilisant les poids de Boltzmann
+        for conformer in complete_conformers:
+            weight = boltzmann_weights[conformer]
 
-        # Calculer les potentiels de réduction (V)
-        try:
-            potentials = {}
-            for param, value in avg_params.items():
-                try:
-                    key = f"E_{param}" if param != 'T_delta_S' else "E_T_delta_S"
-                    potentials[key] = -value/F
-                except Exception as e:
-                    print(f"ERREUR lors du calcul du potentiel pour {param}: {str(e)}")
-                    potentials[f"E_{param}"] = 0.0
-        except Exception as e:
-            print(f"ERREUR lors du calcul des potentiels: {str(e)}")
-            return avg_params, {}, redox_parameters, boltzmann_weights
+            # Paramètres de réduction
+            for param in avg_params_red:
+                avg_params_red[param] += weight * redox_parameters[conformer]['reduction'][param]
 
-        neutral_orbitals = {}  # Dictionnaire pour stocker les valeurs HOMO/LUMO des neutres optimisés
+            # Paramètres d'oxydation
+            for param in avg_params_ox:
+                avg_params_ox[param] += weight * redox_parameters[conformer]['oxidation'][param]
 
+        # Stocker les résultats combinés
+        avg_params = {
+            'reduction': avg_params_red,
+            'oxidation': avg_params_ox
+        }
+
+        # Calculer les potentiels (V vs référence)
+        potentials = {
+            'reduction': {param: -value/F for param, value in avg_params_red.items()},
+            'oxidation': {param: value/F for param, value in avg_params_ox.items()}  # Inverser le signe pour l'oxydation
+        }
+
+        # Récupérer les données HOMO/LUMO
+        neutral_orbitals = {}
         for filename, energies in energy_data.items():
             match = re.search(pattern, filename)
             if match and match.group(2) == 'neutral':
                 conformer = match.group(1)
-                if 'HOMO' in energies and 'LUMO' in energies:
+                if 'HOMO' in energies and 'LUMO' in energies and energies['HOMO'] is not None and energies['LUMO'] is not None:
                     neutral_orbitals[conformer] = {
                         'HOMO': energies['HOMO'],
-                        'LUMO': energies['LUMO']
+                        'LUMO': energies['LUMO'],
+                        'Gap': energies['LUMO'] - energies['HOMO']
                     }
 
-        # Calculer les moyennes pondérées des HOMO et LUMO
+        # Calculer moyennes pondérées des orbitales
         weighted_homo = 0.0
         weighted_lumo = 0.0
-        homo_lumo_available = False
-
         for conformer in complete_conformers:
             if conformer in neutral_orbitals:
-                weight = boltzmann_weights.get(conformer, 0.0)
-                if 'HOMO' in neutral_orbitals[conformer] and neutral_orbitals[conformer]['HOMO'] is not None:
-                    weighted_homo += neutral_orbitals[conformer]['HOMO'] * weight
-                    homo_lumo_available = True
-                if 'LUMO' in neutral_orbitals[conformer] and neutral_orbitals[conformer]['LUMO'] is not None:
-                    weighted_lumo += neutral_orbitals[conformer]['LUMO'] * weight
-                    homo_lumo_available = True
+                weight = boltzmann_weights[conformer]
+                weighted_homo += neutral_orbitals[conformer]['HOMO'] * weight
+                weighted_lumo += neutral_orbitals[conformer]['LUMO'] * weight
 
-        # Calculer le gap HOMO-LUMO moyen pondéré
-        weighted_gap = weighted_lumo - weighted_homo if homo_lumo_available else None
+        weighted_gap = weighted_lumo - weighted_homo
 
-        try:
-            # Vérifier l'égalité thermodynamique
-            print(f"\nVérification de l'égalité thermodynamique:")
-            print(f"∆G = {avg_params['delta_G']:.2f} kJ/mol")
-            print(f"EA + Edef + ∆∆U - T∆S = {equality_check:.2f} kJ/mol")
-            print(f"Différence = {equality_diff:.2f} kJ/mol")
+        # Afficher les résultats - Réduction
+        print("\n=== POTENTIELS DE RÉDUCTION ===")
+        print(f"E(∆G)   = {potentials['reduction']['delta_G']:.3f} V")
+        print(f"E(EA)   = {potentials['reduction']['EA']:.3f} V")
+        print(f"E(Edef) = {potentials['reduction']['Edef']:.3f} V")
+        print(f"E(∆∆U)  = {potentials['reduction']['delta_delta_U']:.3f} V")
+        print(f"E(T∆S)  = {potentials['reduction']['T_delta_S']:.3f} V")
 
-            # Afficher les potentiels de réduction
-            print("\nPotentiels de réduction:")
-            print(f"E(∆G)   = {potentials.get('E_delta_G', 0):.3f} V")
-            print(f"E(EA)   = {potentials.get('E_EA', 0):.3f} V")
-            print(f"E(Edef) = {potentials.get('E_Edef', 0):.3f} V")
-            print(f"E(∆∆U)  = {potentials.get('E_delta_delta_U', 0):.3f} V")
-            print(f"E(T∆S)  = {potentials.get('E_T_delta_S', 0):.3f} V")
+        # Vérification de la cohérence thermodynamique - Réduction
+        sum_contributions = (potentials['reduction']['EA'] +
+                            potentials['reduction']['Edef'] +
+                            potentials['reduction']['delta_delta_U'] +
+                            potentials['reduction']['T_delta_S'])
 
-            sum_potentials = (potentials.get('E_EA', 0) + potentials.get('E_Edef', 0) +
-                              potentials.get('E_delta_delta_U', 0) + potentials.get('E_T_delta_S', 0))
+        print("\nSomme des contributions (réduction):")
+        print(f"E(EA) + E(Edef) + E(∆∆U) + E(T∆S) = {sum_contributions:.3f} V")
+        print(f"E(∆G) = {potentials['reduction']['delta_G']:.3f} V")
+        print(f"Écart = {potentials['reduction']['delta_G'] - sum_contributions:.3f} V")
 
-            print("\nSomme des contributions:")
-            print(f"E(EA) + E(Edef) + E(∆∆U) - E(T∆S) = {sum_potentials:.3f} V")
-            print(f"E(∆G) = {potentials.get('E_delta_G', 0):.3f} V")
+        # Afficher les résultats - Oxydation
+        print("\n=== POTENTIELS D'OXYDATION ===")
+        print(f"E(∆G)   = {potentials['oxidation']['delta_G']:.3f} V")
+        print(f"E(IP)   = {potentials['oxidation']['IP']:.3f} V")
+        print(f"E(Edef) = {potentials['oxidation']['Edef']:.3f} V")
+        print(f"E(∆∆U)  = {potentials['oxidation']['delta_delta_U']:.3f} V")
+        print(f"E(T∆S)  = {potentials['oxidation']['T_delta_S']:.3f} V")
 
-            # Afficher les moyennes pondérées des HOMO et LUMO
-            if homo_lumo_available:
-                print("\nValeurs moyennes pondérées des orbitales:")
-                print(f"HOMO moyenne: {weighted_homo:.4f} eV")
-                print(f"LUMO moyenne: {weighted_lumo:.4f} eV")
-                print(f"Gap HOMO-LUMO moyen: {weighted_gap:.4f} eV")
-            else:
-                print("\nImpossible de calculer les moyennes pondérées des HOMO/LUMO: données insuffisantes")
+        # Vérification de la cohérence thermodynamique - Oxydation
+        sum_contributions_ox = (potentials['oxidation']['IP'] +
+                              potentials['oxidation']['Edef'] +
+                              potentials['oxidation']['delta_delta_U'] +
+                              potentials['oxidation']['T_delta_S'])
 
-        except Exception as e:
-            print(f"ERREUR lors de l'affichage des moyennes et potentiels: {str(e)}")
+        print("\nSomme des contributions (oxydation):")
+        print(f"E(IP) + E(Edef) + E(∆∆U) + E(T∆S) = {sum_contributions_ox:.3f} V")
+        print(f"E(∆G) = {potentials['oxidation']['delta_G']:.3f} V")
+        print(f"Écart = {potentials['oxidation']['delta_G'] - sum_contributions_ox:.3f} V")
 
-        print("="*80)
+        # Afficher les données des orbitales
+        print("\n=== ORBITALES MOLÉCULAIRES MOYENNES PONDÉRÉES ===")
+        print(f"HOMO moyenne: {weighted_homo:.4f} eV")
+        print(f"LUMO moyenne: {weighted_lumo:.4f} eV")
+        print(f"Gap HOMO-LUMO moyen: {weighted_gap:.4f} eV")
 
-        # Enregistrer les résultats dans un fichier texte
+        # Enregistrer les résultats dans un fichier
         try:
             # Déterminer le chemin du dossier results
-            try:
-                workdir = config.default_jobmanager.workdir
-                results_dir = os.path.join(workdir, 'redox_results')
+            from scm.plams import config
+            workdir = config.default_jobmanager.workdir
+            results_dir = os.path.join(workdir, 'redox_results')
 
-                # Créer le dossier s'il n'existe pas
-                if not os.path.exists(results_dir):
-                    os.makedirs(results_dir)
-            except Exception as e:
-                print(f"ERREUR lors de la création du dossier de résultats: {str(e)}")
-                results_dir = "."  # Utiliser le répertoire courant en cas d'erreur
+            # Créer le dossier s'il n'existe pas
+            if not os.path.exists(results_dir):
+                os.makedirs(results_dir)
 
             # Nom du fichier d'output
             output_file = os.path.join(results_dir, f"redox_potentials.txt")
 
             with open(output_file, 'w') as f:
-                f.write("POTENTIELS DE RÉDUCTION\n")
+                # Écrire l'en-tête
+                f.write("POTENTIELS REDOX CALCULÉS\n")
                 f.write("=" * 50 + "\n\n")
 
                 # Informations générales
                 f.write(f"Température: {temperature} K\n")
-                f.write(f"RT: {RT:.4f} kJ/mol\n")
                 f.write(f"Nombre de conformères: {len(complete_conformers)}\n\n")
 
-                # Paramètres de calcul
-                try:
-                    # S'il y a une variable globale ou un paramètre de configuration, l'ajouter ici
-                    f.write(f"Commentaires de calcul: Analyse effectuée avec succès\n\n")
-                except Exception:
-                    pass
-
-                # Potentiels moyens
-                f.write("POTENTIELS MOYENS (V vs. référence):\n")
+                # === SECTION RÉDUCTION ===
+                f.write("POTENTIELS DE RÉDUCTION (V vs. référence):\n")
                 f.write("-" * 50 + "\n")
-                f.write(f"E(∆G) = {potentials.get('E_delta_G', 0):.4f} V\n")
+                f.write(f"E(∆G) = {potentials['reduction']['delta_G']:.4f} V\n")
                 f.write("\nContributions:\n")
-                f.write(f"E(EA) = {potentials.get('E_EA', 0):.4f} V\n")
-                f.write(f"E(Edef) = {potentials.get('E_Edef', 0):.4f} V\n")
-                f.write(f"E(∆∆U) = {potentials.get('E_delta_delta_U', 0):.4f} V\n")
-                f.write(f"E(T∆S) = {potentials.get('E_T_delta_S', 0):.4f} V\n")
+                f.write(f"E(EA) = {potentials['reduction']['EA']:.4f} V\n")
+                f.write(f"E(Edef) = {potentials['reduction']['Edef']:.4f} V\n")
+                f.write(f"E(∆∆U) = {potentials['reduction']['delta_delta_U']:.4f} V\n")
+                f.write(f"E(T∆S) = {potentials['reduction']['T_delta_S']:.4f} V\n")
+                f.write(f"Somme: {sum_contributions:.4f} V\n")
+                f.write(f"Écart: {potentials['reduction']['delta_G'] - sum_contributions:.4f} V\n\n")
 
-                # Calcul de la somme
-                try:
-                    required_keys = ['E_EA', 'E_Edef', 'E_delta_delta_U', 'E_T_delta_S']
-                    if all(k in potentials for k in required_keys):
-                        sum_potentials = (potentials['E_EA'] + potentials['E_Edef'] +
-                                         potentials['E_delta_delta_U'] + potentials['E_T_delta_S'])
-                        f.write(f"Somme: {sum_potentials:.4f} V\n\n")
-                    else:
-                        missing_keys = [k for k in required_keys if k not in potentials]
-                        f.write(f"Somme: N/A (données incomplètes - manquants: {missing_keys})\n\n")
-                except Exception as e:
-                    f.write(f"Somme: N/A (erreur: {str(e)})\n\n")
+                # === SECTION OXYDATION ===
+                f.write("POTENTIELS D'OXYDATION (V vs. référence):\n")
+                f.write("-" * 50 + "\n")
+                f.write(f"E(∆G) = {potentials['oxidation']['delta_G']:.4f} V\n")
+                f.write("\nContributions:\n")
+                f.write(f"E(IP) = {potentials['oxidation']['IP']:.4f} V\n")
+                f.write(f"E(Edef) = {potentials['oxidation']['Edef']:.4f} V\n")
+                f.write(f"E(∆∆U) = {potentials['oxidation']['delta_delta_U']:.4f} V\n")
+                f.write(f"E(T∆S) = {potentials['oxidation']['T_delta_S']:.4f} V\n")
+                f.write(f"Somme: {sum_contributions_ox:.4f} V\n")
+                f.write(f"Écart: {potentials['oxidation']['delta_G'] - sum_contributions_ox:.4f} V\n\n")
 
-                # Données par conformère
+                # === DÉTAILS PAR CONFORMÈRE ===
                 f.write("DÉTAILS PAR CONFORMÈRE:\n")
                 f.write("-" * 50 + "\n")
-                f.write(f"{'Conformère':<15} {'Poids':<10} {'E(∆G) [V]':<12}\n")
-                f.write("-" * 40 + "\n")
+                f.write(f"{'Conformère':<15} {'Poids':<10} {'E_red(∆G) [V]':<15} {'E_ox(∆G) [V]':<15}\n")
+                f.write("-" * 60 + "\n")
 
                 for conformer in sorted(complete_conformers):
-                    try:
-                        weight = boltzmann_weights.get(conformer, 0)
-                        if conformer in redox_parameters and 'delta_G' in redox_parameters[conformer]:
-                            e_value = -redox_parameters[conformer]['delta_G']/F
-                        else:
-                            e_value = 0
-                        f.write(f"{conformer:<15} {weight:.4f} {e_value:12.4f}\n")
-                    except Exception as e:
-                        f.write(f"{conformer:<15} ERROR: {str(e)}\n")
+                    weight = boltzmann_weights[conformer]
+                    e_red = -redox_parameters[conformer]['reduction']['delta_G']/F
+                    e_ox = redox_parameters[conformer]['oxidation']['delta_G']/F
+                    f.write(f"{conformer:<15} {weight:.4f} {e_red:15.4f} {e_ox:15.4f}\n")
 
-                # Ajouter les moyennes pondérées des HOMO/LUMO
+                # === ORBITALES MOLÉCULAIRES ===
                 f.write("\n\n" + "="*50 + "\n")
-                f.write("ÉNERGIES DES ORBITALES MOLÉCULAIRES MOYENNES PONDÉRÉES\n")
+                f.write("ÉNERGIES DES ORBITALES MOLÉCULAIRES\n")
                 f.write("="*50 + "\n\n")
 
-                if homo_lumo_available:
-                    f.write(f"HOMO moyenne pondérée: {weighted_homo:.4f} eV\n")
-                    f.write(f"LUMO moyenne pondérée: {weighted_lumo:.4f} eV\n")
-                    f.write(f"Gap HOMO-LUMO moyen pondéré: {weighted_gap:.4f} eV\n")
-                else:
-                    f.write("Impossible de calculer les moyennes pondérées des orbitales: données insuffisantes\n")
+                # Moyennes pondérées
+                f.write("Moyennes pondérées:\n")
+                f.write(f"HOMO: {weighted_homo:.4f} eV\n")
+                f.write(f"LUMO: {weighted_lumo:.4f} eV\n")
+                f.write(f"Gap: {weighted_gap:.4f} eV\n\n")
 
-                # Ajouter les résultats RMSD si disponibles
-                if rmsd_export_data and 'summary' in rmsd_export_data and 'warnings' in rmsd_export_data:
-                    f.write("\n\n" + "="*50 + "\n")
-                    f.write("ANALYSE STRUCTURELLE PAR RMSD (ALGORITHME DE KABSCH)\n")
-                    f.write("="*50 + "\n\n")
-
-                    f.write(f"{'Conformère réduit':<25} {'Conformère neutre le plus proche':<30} {'RMSD (Å)':<10}\n")
-                    f.write("-"*70 + "\n")
-
-                    for reduced_name, neutral_name, rmsd_value in rmsd_export_data['summary']:
-                        f.write(f"{reduced_name:<25} {neutral_name:<30} {rmsd_value:.4f}\n")
-
-                    # Ajouter les avertissements de changement de conformère
-                    f.write("\n\n" + "="*50 + "\n")
-                    f.write("IDENTIFICATION DES POSSIBLE CHANGEMENTS DE CONFORMÈRE\n")
-                    f.write("="*50 + "\n\n")
-
-                    for warning in rmsd_export_data['warnings']:
-                        f.write(warning + "\n\n")
-
-                # Ajouter une section pour les niveaux HOMO/LUMO
-                f.write("\n\n" + "="*50 + "\n")
-                f.write("NIVEAUX ÉNERGÉTIQUES DES ORBITALES MOLÉCULAIRES PAR CONFORMÈRE\n")
-                f.write("="*50 + "\n\n")
-
-                # En-têtes du tableau
+                # Par conformère
                 f.write(f"{'Conformère':<15} {'HOMO (eV)':<15} {'LUMO (eV)':<15} {'Gap (eV)':<15}\n")
                 f.write("-" * 60 + "\n")
 
-                # Écrire les valeurs pour chaque conformère
                 for conformer in sorted(complete_conformers):
                     if conformer in neutral_orbitals:
-                        homo = neutral_orbitals[conformer].get('HOMO')
-                        lumo = neutral_orbitals[conformer].get('LUMO')
-
-                        homo_str = f"{homo:.4f}" if homo is not None else "N/A"
-                        lumo_str = f"{lumo:.4f}" if lumo is not None else "N/A"
-
-                        # Calculer le gap HOMO-LUMO
-                        if homo is not None and lumo is not None:
-                            gap = lumo - homo
-                            gap_str = f"{gap:.4f}"
-                        else:
-                            gap_str = "N/A"
-
-                        f.write(f"{conformer:<15} {homo_str:<15} {lumo_str:<15} {gap_str:<15}\n")
+                        homo = neutral_orbitals[conformer]['HOMO']
+                        lumo = neutral_orbitals[conformer]['LUMO']
+                        gap = neutral_orbitals[conformer]['Gap']
+                        f.write(f"{conformer:<15} {homo:.4f} {lumo:.4f} {gap:.4f}\n")
                     else:
                         f.write(f"{conformer:<15} {'N/A':<15} {'N/A':<15} {'N/A':<15}\n")
+
+                # === SECTION RMSD ===
+                if rmsd_export_data:
+                    f.write("\n\n" + "="*50 + "\n")
+                    f.write("ANALYSE STRUCTURELLE PAR RMSD\n")
+                    f.write("="*50 + "\n\n")
+    
+                    # Afficher les résultats des conformères réduits
+                    if 'summary_reduced' in rmsd_export_data and rmsd_export_data['summary_reduced']:
+                        f.write("CONFORMÈRES RÉDUITS\n")
+                        f.write(f"{'Conformère réduit':<25} {'Conformère neutre':<25} {'RMSD (Å)':<10}\n")
+                        f.write("-"*65 + "\n")
+        
+                        for reduced_name, neutral_name, rmsd_value in rmsd_export_data['summary_reduced']:
+                            f.write(f"{reduced_name:<25} {neutral_name:<25} {rmsd_value:.4f}\n")
+        
+                        f.write("\n")
+    
+                    # Afficher les résultats des conformères oxidés
+                    if 'summary_oxidized' in rmsd_export_data and rmsd_export_data['summary_oxidized']:
+                        f.write("CONFORMÈRES OXIDÉS\n")
+                        f.write(f"{'Conformère oxidé':<25} {'Conformère neutre':<25} {'RMSD (Å)':<10}\n")
+                        f.write("-"*65 + "\n")
+        
+                        for oxidized_name, neutral_name, rmsd_value in rmsd_export_data['summary_oxidized']:
+                            f.write(f"{oxidized_name:<25} {neutral_name:<25} {rmsd_value:.4f}\n")
+        
+                        f.write("\n")
+    
+                    # Afficher les avertissements
+                    if 'warnings' in rmsd_export_data and rmsd_export_data['warnings']:
+                        f.write("\nAVERTISSEMENTS DE CHANGEMENT CONFORMATIONNEL:\n")
+                        f.write("-"*50 + "\n")
+                        for warning in rmsd_export_data['warnings']:
+                            f.write(f"- {warning}\n")
 
             print(f"\nRésultats enregistrés dans {output_file}")
 
@@ -1111,26 +1174,39 @@ def main():
 
         # Read molecule from XYZ
         mol = Molecule(xyz_file)
-        job_results[name] = {'neutral': None, 'sp': None, 'opt': None}
+        job_results[name] = {'neutre_opt': None, 'réduit_sp': None, 'réduit_opt': None, 'oxidé_sp': None, 'oxidé_opt': None}
 
         try:
             # Step 1: Optimize neutral
             job_neutral = optimize_neutral(mol, name, args.solvent, args.functional, args.basis)
             if not job_neutral:
                 continue
-            job_results[name]['neutral'] = job_neutral
+            job_results[name]['neutre_opt'] = job_neutral
 
             # Step 2: Single point reduced
-            job_sp = sp_reduced(job_neutral, name, args.solvent, args.functional, args.basis)
-            if not job_sp:
+            job_reduced_sp = sp_reduced(job_neutral, name, args.solvent, args.functional, args.basis)
+            if not job_reduced_sp:
                 continue
-            job_results[name]['sp'] = job_sp
+            job_results[name]['réduit_sp'] = job_reduced_sp
 
             # Step 3: Optimize reduced
-            job_opt = optimize_reduced(job_sp, name, args.solvent, args.functional, args.basis)
-            if not job_opt:
+            job_reduced_opt = optimize_reduced(job_neutral, name, args.solvent, args.functional, args.basis)
+            if not job_reduced_opt:
                 continue
-            job_results[name]['opt'] = job_opt
+            job_results[name]['réduit_opt'] = job_reduced_opt
+
+            # Step 4: Single point oxidized
+            job_oxidized_sp = sp_oxidized(job_neutral, name, args.solvent, args.functional, args.basis)
+            if not job_oxidized_sp:
+                continue
+            job_results[name]['oxidé_sp'] = job_oxidized_sp
+
+            # Step 3: Optimize oxidized
+            job_oxidized_opt = optimize_oxidized(job_neutral, name, args.solvent, args.functional, args.basis)
+            if not job_oxidized_opt:
+                continue
+            job_results[name]['oxidé_opt'] = job_oxidized_opt
+
         except Exception as e:
             print(f"ERREUR lors du traitement de {basename}: {str(e)}")
             continue
