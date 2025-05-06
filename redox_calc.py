@@ -158,7 +158,8 @@ def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=
 
     return s
 
-def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
+
+def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
     Étape 1: Optimisation géométrique de la molécule neutre
     
@@ -168,6 +169,7 @@ def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis
         solvent (str): Solvant à utiliser
         functional (str): Fonctionnelle DFT
         basis (str): Base à utiliser
+        max_attempts (int): Nombre maximal de tentatives de correction
         
     Returns:
         AMSJob: Job d'optimisation terminé ou None en cas d'échec
@@ -176,40 +178,52 @@ def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis
     settings = setup_adf_settings(task="GeometryOptimization", charge=0, 
                                  solvent=solvent, functional=functional, basis=basis)
     
+    # S'assurer que le calcul inclut les modes normaux
+    settings.input.ams.Properties.NormalModes = "Yes"
+    
     job = AMSJob(settings=settings, name=f"{name}_neutre_opt", molecule=mol)
     job.run()
     
     if job.check():
         print(f"  Optimisation neutre réussie pour {name}")
+        
+        print(f"  Vérification des fréquences imaginaires...")
+        job, fixed = check_and_fix_frequencies(job, f"{name}_neutre", settings, charge=0, max_attempts=max_attempts)
+        if fixed:
+            print(f"  Structure sans fréquence imaginaire obtenue pour {name} (neutre)")
+        else:
+            print(f"  AVERTISSEMENT: Des fréquences imaginaires persistent pour {name} (neutre)")
         return job
     else:
         print(f"  ERREUR: Optimisation neutre échouée pour {name}")
         return None
 
-def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
+
+def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
     Étape 2: Calcul en simple point de la molécule réduite (charge -1)
-    
+
     Args:
         job_neutral (AMSJob): Job d'optimisation de la molécule neutre
         name (str): Nom de base pour le job
         solvent (str): Solvant à utiliser
         functional (str): Fonctionnelle DFT
         basis (str): Base à utiliser
-        
+        max_attempts (int): Nombre maximal de tentatives de correction
+
     Returns:
         AMSJob: Job de single point terminé ou None en cas d'échec
     """
     # Récupérer la molécule optimisée de l'étape 1
     mol_opt = job_neutral.results.get_main_molecule()
-    
+
     print(f"\nÉtape 2: Calcul en simple point de {name} (réduit, charge -1)")
-    settings = setup_adf_settings(task="SinglePoint", charge=-1, spin_polarization=1.0, 
+    settings = setup_adf_settings(task="SinglePoint", charge=-1, spin_polarization=1.0,
                                  solvent=solvent, functional=functional, basis=basis)
-    
-    job = AMSJob(settings=settings, name=f"{name}_réduit_sp", molecule=mol_opt)
+
+    job = AMSJob(settings=settings, name=f"{name}_reduit_sp", molecule=mol_opt)
     job.run()
-    
+
     if job.check():
         print(f"  Calcul simple point réussi pour {name} (réduit)")
         return job
@@ -217,61 +231,73 @@ def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", bas
         print(f"  ERREUR: Calcul simple point échoué pour {name} (réduit)")
         return None
 
-def optimize_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
+
+def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
     Étape 3: Optimisation géométrique de la molécule réduite (charge -1)
-    
+
     Args:
         job_sp (AMSJob): Job de single point de la molécule réduite
         name (str): Nom de base pour le job
         solvent (str): Solvant à utiliser
         functional (str): Fonctionnelle DFT
         basis (str): Base à utiliser
-        
+        max_attempts (int): Nombre maximal de tentatives de correction
+
     Returns:
         AMSJob: Job d'optimisation terminé ou None en cas d'échec
     """
     # Récupérer la molécule réduite du calcul single point
-    mol_opt = job_neutral.results.get_main_molecule()
-    
+    mol_opt = job_sp.results.get_main_molecule()
+
     print(f"\nÉtape 3: Optimisation géométrique de {name} (réduit, charge -1)")
-    settings = setup_adf_settings(task="GeometryOptimization", charge=-1, spin_polarization=1.0, 
+    settings = setup_adf_settings(task="GeometryOptimization", charge=-1, spin_polarization=1.0,
                                  solvent=solvent, functional=functional, basis=basis)
-    
-    job = AMSJob(settings=settings, name=f"{name}_réduit_opt", molecule=mol_opt)
+
+    job = AMSJob(settings=settings, name=f"{name}_reduit_opt", molecule=mol_opt)
     job.run()
-    
+
     if job.check():
         print(f"  Optimisation réduite réussie pour {name}")
+
+        print(f"  Vérification des fréquences imaginaires...")
+        job, fixed = check_and_fix_frequencies(job, f"{name}_reduit", settings,
+                                              charge=-1, spin_polarization=1.0, max_attempts=max_attempts)
+        if fixed:
+            print(f"  Structure sans fréquence imaginaire obtenue pour {name} (réduit)")
+        else:
+            print(f"  AVERTISSEMENT: Des fréquences imaginaires persistent pour {name} (réduit)")
         return job
     else:
         print(f"  ERREUR: Optimisation réduite échouée pour {name}")
         return None
 
-def sp_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
+
+def sp_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
-    Étape 4: Calcul en simple point de la molécule oxidé (charge +1)
-    
+    Étape 4: Calcul en simple point de la molécule oxidée (charge +1)
+
     Args:
         job_neutral (AMSJob): Job d'optimisation de la molécule neutre
         name (str): Nom de base pour le job
         solvent (str): Solvant à utiliser
         functional (str): Fonctionnelle DFT
         basis (str): Base à utiliser
-        
+        max_attempts (int): Nombre maximal de tentatives de correction
+
     Returns:
         AMSJob: Job de single point terminé ou None en cas d'échec
     """
     # Récupérer la molécule optimisée de l'étape 1
     mol_opt = job_neutral.results.get_main_molecule()
-    
+
     print(f"\nÉtape 4: Calcul en simple point de {name} (oxidé, charge +1)")
-    settings = setup_adf_settings(task="SinglePoint", charge=1, spin_polarization=1.0, 
+    settings = setup_adf_settings(task="SinglePoint", charge=1, spin_polarization=1.0,
                                  solvent=solvent, functional=functional, basis=basis)
-    
+
     job = AMSJob(settings=settings, name=f"{name}_oxidé_sp", molecule=mol_opt)
     job.run()
-    
+
     if job.check():
         print(f"  Calcul simple point réussi pour {name} (oxidé)")
         return job
@@ -279,9 +305,10 @@ def sp_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE0", ba
         print(f"  ERREUR: Calcul simple point échoué pour {name} (oxidé)")
         return None
 
-def optimize_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP"):
+
+def optimize_oxidized(job_sp, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
-    Étape 5: Optimisation géométrique de la molécule oxidé (charge +1)
+    Étape 5: Optimisation géométrique de la molécule réduite (charge -1)
     
     Args:
         job_sp (AMSJob): Job de single point de la molécule réduite
@@ -289,12 +316,13 @@ def optimize_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE
         solvent (str): Solvant à utiliser
         functional (str): Fonctionnelle DFT
         basis (str): Base à utiliser
+        max_attempts (int): Nombre maximal de tentatives de correction
         
     Returns:
         AMSJob: Job d'optimisation terminé ou None en cas d'échec
     """
     # Récupérer la molécule réduite du calcul single point
-    mol_opt = job_neutral.results.get_main_molecule()
+    mol_opt = job_sp.results.get_main_molecule()
     
     print(f"\nÉtape 5: Optimisation géométrique de {name} (oxidé, charge +1)")
     settings = setup_adf_settings(task="GeometryOptimization", charge=1, spin_polarization=1.0, 
@@ -304,11 +332,270 @@ def optimize_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE
     job.run()
     
     if job.check():
-        print(f"  Optimisation oxidé réussie pour {name}")
+        print(f"  Optimisation oxidée réussie pour {name}")
+        
+        print(f"  Vérification des fréquences imaginaires...")
+        job, fixed = check_and_fix_frequencies(job, f"{name}_oxidé", settings, 
+                                              charge=+1, spin_polarization=1.0, max_attempts=max_attempts)
+        if fixed:
+            print(f"  Structure sans fréquence imaginaire obtenue pour {name} (oxidé)")
+        else:
+            print(f"  AVERTISSEMENT: Des fréquences imaginaires persistent pour {name} (oxidé)")
         return job
     else:
-        print(f"  ERREUR: Optimisation oxidé échouée pour {name}")
+        print(f"  ERREUR: Optimisation oxidée échouée pour {name}")
         return None
+
+
+def check_and_fix_frequencies(job_initial, name, settings, charge=0, spin_polarization=0, max_attempts=3):
+    """
+    Vérifie et corrige les fréquences imaginaires d'un calcul.
+
+    Args:
+        job_initial (AMSJob): Job initial dont on veut vérifier/corriger les fréquences
+        name (str): Nom de base pour les jobs de correction
+        settings (Settings): Paramètres de calcul à utiliser pour les corrections
+        charge (int): Charge de la molécule
+        spin_polarization (float): Polarisation de spin pour les systèmes à couche ouverte
+        max_attempts (int): Nombre maximal de tentatives de correction
+
+    Returns:
+        tuple: (job_final, fixed_successfully)
+            - job_final: Meilleur job obtenu (avec ou sans fréquences imaginaires)
+            - fixed_successfully: Booléen indiquant si toutes les fréquences imaginaires ont été corrigées
+    """
+    # S'assurer que le calcul initial a réussi
+    if not job_initial.check():
+        print(f"  ERREUR: Le job initial {job_initial.name} a échoué, impossible de vérifier les fréquences")
+        return job_initial, False
+
+    # Créer un dossier pour les corrections
+    correction_dir = os.path.join(os.path.dirname(job_initial.path), f"{name}_freq_corrections")
+    os.makedirs(correction_dir, exist_ok=True)
+
+    # Vérifier les fréquences imaginaires
+    output_file = os.path.join(job_initial.path, f"{job_initial.name}.out")
+    imaginary_modes = extract_imaginary_modes(output_file)
+
+    # Si pas de fréquence imaginaire, retourner le job initial
+    if not imaginary_modes:
+        print(f"  Pas de fréquence imaginaire pour {name}")
+        return job_initial, True
+
+    # Si des fréquences imaginaires sont détectées, tenter de les corriger
+    freqs = [f"{mode['mode']}:{mode['frequency']:.2f} cm-1" for mode in imaginary_modes]
+    print(f"  Fréquences imaginaires détectées: {', '.join(freqs)}")
+    print(f"  Tentative de correction des fréquences imaginaires...")
+
+    # Obtenir la molécule optimisée depuis le job initial
+    current_mol = job_initial.results.get_main_molecule()
+
+    # S'assurer que les settings incluent le calcul des modes normaux
+    settings_copy = settings.copy()
+    settings_copy.input.ams.Properties.NormalModes = "Yes"
+
+    # Mettre à jour les paramètres de charge et spin si nécessaire
+    if charge != 0:
+        settings_copy.input.ams.System.Charge = charge
+    if spin_polarization > 0:
+        settings_copy.input.adf.SpinPolarization = spin_polarization
+        settings_copy.input.adf.Unrestricted = "Yes"
+
+    # Perturbation initiale
+    perturbation_scale = 0.5
+
+    # Tentatives de correction
+    best_job = job_initial
+    best_imaginary_count = len(imaginary_modes)
+
+    for attempt in range(1, max_attempts + 1):
+        # Trouver le mode avec la fréquence la plus négative
+        worst_mode = min(imaginary_modes, key=lambda x: x["frequency"])
+
+        print(f"  Tentative {attempt}/{max_attempts} - Perturbation du mode {worst_mode['mode']} "
+              f"(fréquence: {worst_mode['frequency']:.2f} cm-1) avec un facteur d'échelle de {perturbation_scale}")
+
+        # Créer deux versions perturbées (positive et négative)
+        pos_perturbed_mol = perturb_molecule(current_mol, worst_mode, perturbation_scale)
+        neg_perturbed_mol = perturb_molecule(current_mol, worst_mode, -perturbation_scale)
+
+        # Optimiser la géométrie avec perturbation positive
+        job_pos = AMSJob(settings=settings_copy,
+                        name=f"{name}_corr_{attempt}_pos",
+                        molecule=pos_perturbed_mol)
+
+        # Définir le répertoire de travail pour ce job
+        # job_pos.settings.runscript.pre = f"mkdir -p {correction_dir}/{job_pos.name}\ncd {correction_dir}/{job_pos.name}"
+
+        # Exécuter le calcul
+        job_pos.run()
+        pos_success = job_pos.check()
+
+        # Analyser les résultats de la perturbation positive
+        imaginary_modes_pos = []
+        if pos_success:
+            output_file_pos = os.path.join(job_pos.path, f"{job_pos.name}.out")
+            imaginary_modes_pos = extract_imaginary_modes(output_file_pos)
+
+            if not imaginary_modes_pos:
+                print(f"  Correction réussie avec perturbation positive (tentative {attempt})")
+                return job_pos, True
+
+        # Optimiser la géométrie avec perturbation négative
+        job_neg = AMSJob(settings=settings_copy,
+                        name=f"{name}_corr_{attempt}_neg",
+                        molecule=neg_perturbed_mol)
+
+        # Définir le répertoire de travail pour ce job
+        # job_neg.settings.runscript.pre = f"mkdir -p {correction_dir}/{job_neg.name}\ncd {correction_dir}/{job_neg.name}"
+
+        # Exécuter le calcul
+        job_neg.run()
+        neg_success = job_neg.check()
+
+        # Analyser les résultats de la perturbation négative
+        imaginary_modes_neg = []
+        if neg_success:
+            output_file_neg = os.path.join(job_neg.path, f"{job_neg.name}.out")
+            imaginary_modes_neg = extract_imaginary_modes(output_file_neg)
+
+            if not imaginary_modes_neg:
+                print(f"  Correction réussie avec perturbation négative (tentative {attempt})")
+                return job_neg, True
+
+        # Mettre à jour le meilleur job si nécessaire
+        if pos_success and len(imaginary_modes_pos) < best_imaginary_count:
+            best_job = job_pos
+            best_imaginary_count = len(imaginary_modes_pos)
+            print(f"  Nouveau meilleur résultat: perturbation positive avec {best_imaginary_count} fréquences imaginaires")
+
+        if neg_success and len(imaginary_modes_neg) < best_imaginary_count:
+            best_job = job_neg
+            best_imaginary_count = len(imaginary_modes_neg)
+            print(f"  Nouveau meilleur résultat: perturbation négative avec {best_imaginary_count} fréquences imaginaires")
+
+        # Si les deux approches ont échoué, augmenter le facteur de perturbation
+        if not pos_success and not neg_success:
+            print(f"  Les deux perturbations ont échoué, augmentation du facteur d'échelle")
+            perturbation_scale += 0.25
+            continue
+
+        # Choisir la meilleure géométrie pour la prochaine itération
+        if pos_success and neg_success:
+            if len(imaginary_modes_pos) <= len(imaginary_modes_neg):
+                current_mol = job_pos.results.get_main_molecule()
+                imaginary_modes = imaginary_modes_pos
+                print(f"  Continuation avec résultat de perturbation positive")
+            else:
+                current_mol = job_neg.results.get_main_molecule()
+                imaginary_modes = imaginary_modes_neg
+                print(f"  Continuation avec résultat de perturbation négative")
+        elif pos_success:
+            current_mol = job_pos.results.get_main_molecule()
+            imaginary_modes = imaginary_modes_pos
+            print(f"  Continuation avec résultat de perturbation positive (seul calcul réussi)")
+        else:  # neg_success
+            current_mol = job_neg.results.get_main_molecule()
+            imaginary_modes = imaginary_modes_neg
+            print(f"  Continuation avec résultat de perturbation négative (seul calcul réussi)")
+
+        # Augmenter légèrement le facteur de perturbation pour la prochaine itération
+        perturbation_scale += 0.1
+
+    # Si nous arrivons ici, c'est que nous n'avons pas réussi à corriger toutes les fréquences imaginaires
+    print(f"  AVERTISSEMENT: Fréquences imaginaires persistantes après {max_attempts} tentatives")
+
+    # Retourner le meilleur job obtenu
+    return best_job, (best_imaginary_count == 0)
+
+
+def extract_imaginary_modes(output_file):
+    """
+    Extrait les modes normaux à fréquence imaginaire du fichier de sortie.
+
+    Args:
+        output_file (str): Chemin vers le fichier de sortie du calcul
+
+    Returns:
+        list: Liste des modes imaginaires, chacun contenant fréquence et déplacements atomiques
+    """
+    imaginary_modes = []
+
+    with open(output_file, 'r') as f:
+        content = f.read()
+
+    # Utiliser la regex fournie pour trouver tous les modes à fréquence négative
+    pattern = r' Mode:\s+(\d+)\s+Frequency \(cm-1\):\s+([-]\d+\.\d+)\s+Intensity \(km\/mol\):\s+\d+\.\d+\s*\n Index\s+Atom\s+\-+ Displacements \(x\/y\/z\) \-+\n((?:\s+\d+\s+\w+\s+[-]?\d+\.\d+\s+[-]?\d+\.\d+\s+[-]?\d+\.\d+\s*\n)+)'
+
+    # Trouver tous les modes à fréquence négative
+    for match in re.finditer(pattern, content):
+        mode_num = int(match.group(1))
+        frequency = float(match.group(2))  # Déjà négatif par construction du pattern
+        displacements_text = match.group(3)
+
+        # Traiter les déplacements atomiques
+        mode_displacements = []
+        for line in displacements_text.strip().split('\n'):
+            parts = line.split()
+            if len(parts) >= 5:  # Format attendu: index, symbole, x, y, z
+                atom_index = int(parts[0])
+                atom_symbol = parts[1]
+                x = float(parts[2])
+                y = float(parts[3])
+                z = float(parts[4])
+
+                mode_displacements.append({
+                    'index': atom_index,
+                    'symbol': atom_symbol,
+                    'displacements': (x, y, z)
+                })
+
+        # Ajouter ce mode imaginaire à notre liste
+        imaginary_modes.append({
+            'mode': mode_num,
+            'frequency': frequency,
+            'displacements': mode_displacements
+        })
+
+    return imaginary_modes
+
+
+def perturb_molecule(molecule, mode_info, scale_factor=0.5):
+    """
+    Crée une nouvelle géométrie moléculaire en perturbant la structure initiale le long d'un mode normal.
+
+    Args:
+        molecule (Molecule): L'objet Molecule à perturber
+        mode_info (dict): Informations sur le mode normal (fréquence et déplacements)
+        scale_factor (float): Facteur d'échelle pour le déplacement (positif)
+
+    Returns:
+        Molecule: Nouvelle molécule avec géométrie perturbée
+    """
+    # Créer une copie profonde de la molécule
+    perturbed_mol = molecule.copy()
+
+    # Appliquer les déplacements
+    for atom_info in mode_info['displacements']:
+        atom_index = atom_info['index'] - 1  # PLAMS utilise des indices commençant à 0
+        dx, dy, dz = atom_info['displacements']
+
+        # Coordonnées actuelles de l'atome
+        current_coords = perturbed_mol.atoms[atom_index].coords
+
+        # Nouvelles coordonnées (perturbées dans la direction du mode)
+        # Pour les modes imaginaires, on perturbe dans le sens positif du vecteur
+        # car on cherche à "sortir" du point selle
+        new_coords = (
+            current_coords[0] + scale_factor * dx,
+            current_coords[1] + scale_factor * dy,
+            current_coords[2] + scale_factor * dz
+        )
+
+        # Mettre à jour les coordonnées
+        perturbed_mol.atoms[atom_index].coords = new_coords
+
+    return perturbed_mol
 
 
 def kabsch_rmsd(mol1, mol2):
@@ -585,11 +872,12 @@ def export_molecules(jobs_data, prefix="redox_results"):
     except Exception as e:
         print(f"Erreur globale lors de l'exportation des fichiers: {str(e)}")
 
+
 def extract_engine_energies(workdir_parent):
     """
     Lit les fichiers .out dans le dossier redox*/redox_results/,
     extrait diverses valeurs d'énergie (Engine Energy, Internal Energy U, -T*S, Gibbs free energy)
-    et les affiche.
+    ainsi que les valeurs HOMO et LUMO et les affiche.
 
     Args:
         workdir_parent (str): Chemin du dossier parent où se trouvent les dossiers redox*
@@ -597,6 +885,9 @@ def extract_engine_energies(workdir_parent):
     Returns:
         dict: Dictionnaire contenant les énergies extraites par fichier
     """
+    import os
+    import re
+
     print("\n" + "="*80)
     print("ÉNERGIES EXTRAITES DES FICHIERS DE SORTIE")
     print("="*80)
@@ -611,8 +902,9 @@ def extract_engine_energies(workdir_parent):
         'U': r"Internal Energy U:\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)",
         'TS': r"  -T\*S:\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)",
         'G': r"Gibbs free energy:\s+[-\d.]+\s+[-\d.]+\s+[-\d.]+\s+([-\d.]+)",
-        'HOMO': r"HOMO \(eV\):\s+([-\d.]+)",
-        'LUMO': r"LUMO \(eV\):\s+([-\d.]+)"
+        # Nouveaux patterns pour HOMO et LUMO pouvant avoir une ou deux valeurs
+        'HOMO': r"HOMO \(eV\):\s+(-?\d+\.\d+)(?:\s+(-?\d+\.\d+))?",
+        'LUMO': r"LUMO \(eV\):\s+(-?\d+\.\d+)(?:\s+(-?\d+\.\d+))?"
     }
 
     try:
@@ -655,7 +947,7 @@ def extract_engine_energies(workdir_parent):
             return energy_results
 
         # En-tête du tableau
-        print(f"{'Fichier':<30} {'Ee':<25} {'U':<25} {'-T*S':<15} {'Gibbs Energy':<15} {'HOMO (eV)':<15} {'LUMO (eV)':<15}")
+        print(f"{'Fichier':<30} {'Ee':<15} {'U':<15} {'-T*S':<15} {'Gibbs Energy':<15} {'HOMO (eV)':<15} {'LUMO (eV)':<15}")
         print("-"*120)
 
         # Analyser chaque fichier .out
@@ -677,14 +969,45 @@ def extract_engine_energies(workdir_parent):
 
                     # Rechercher toutes les valeurs avec regex
                     for key, pattern in patterns.items():
-                        match = re.search(pattern, content)
-                        if match:
-                            debug_info[out_file]['found_patterns'][key] = True
-                            debug_info[out_file]['raw_matches'][key] = match.group(0)
-                            try:
-                                energy_values[key] = float(match.group(1))
-                            except ValueError as e:
-                                debug_info[out_file]['raw_matches'][f"{key}_error"] = str(e)
+                        if key in ['HOMO', 'LUMO']:
+                            # Traitement spécial pour HOMO et LUMO qui peuvent avoir deux valeurs
+                            match = re.search(pattern, content)
+                            if match:
+                                debug_info[out_file]['found_patterns'][key] = True
+                                debug_info[out_file]['raw_matches'][key] = match.group(0)
+
+                                try:
+                                    value1 = float(match.group(1))
+                                    value2 = None
+                                    if match.group(2):
+                                        value2 = float(match.group(2))
+
+                                    # Choisir la valeur en fonction de HOMO ou LUMO
+                                    if key == 'HOMO':
+                                        # Pour HOMO, prendre la valeur la plus haute (moins négative)
+                                        if value2 is not None:
+                                            energy_values[key] = max(value1, value2)
+                                        else:
+                                            energy_values[key] = value1
+                                    else:  # LUMO
+                                        # Pour LUMO, prendre la valeur la plus basse
+                                        if value2 is not None:
+                                            energy_values[key] = min(value1, value2)
+                                        else:
+                                            energy_values[key] = value1
+
+                                except ValueError as e:
+                                    debug_info[out_file]['raw_matches'][f"{key}_error"] = str(e)
+                        else:
+                            # Traitement standard pour les autres valeurs
+                            match = re.search(pattern, content)
+                            if match:
+                                debug_info[out_file]['found_patterns'][key] = True
+                                debug_info[out_file]['raw_matches'][key] = match.group(0)
+                                try:
+                                    energy_values[key] = float(match.group(1))
+                                except ValueError as e:
+                                    debug_info[out_file]['raw_matches'][f"{key}_error"] = str(e)
 
             except Exception as e:
                 print(f"ERREUR lors de la lecture du fichier {file_path}: {str(e)}")
@@ -731,6 +1054,7 @@ def extract_engine_energies(workdir_parent):
         traceback.print_exc()
 
     return energy_results
+
 
 def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=None):
     """
@@ -847,7 +1171,7 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
 
             # Paramètres énergétiques pour l'oxydation
             ox_params['delta_G'] = ox_opt['G'] - neutral['G']
-            ox_params['IP'] = ox_sp['Ee'] - neutral['Ee']  # Potentiel d'ionisation
+            ox_params['EI'] = ox_sp['Ee'] - neutral['Ee']  # Potentiel d'ionisation
             ox_params['Edef'] = ox_opt['Ee'] - ox_sp['Ee']
             ox_params['delta_delta_U'] = ox_opt['delta_U'] - neutral['delta_U']
             ox_params['T_delta_S'] = ox_opt['TS'] - neutral['TS']
@@ -906,7 +1230,7 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
         # Calculer les moyennes pondérées pour l'oxydation
         avg_params_ox = {
             'delta_G': 0.0,
-            'IP': 0.0,
+            'EI': 0.0,
             'Edef': 0.0,
             'delta_delta_U': 0.0,
             'T_delta_S': 0.0
@@ -938,27 +1262,38 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
 
         # Récupérer les données HOMO/LUMO
         neutral_orbitals = {}
-        for filename, energies in energy_data.items():
-            match = re.search(pattern, filename)
-            if match and match.group(2) == 'neutral':
-                conformer = match.group(1)
-                if 'HOMO' in energies and 'LUMO' in energies and energies['HOMO'] is not None and energies['LUMO'] is not None:
+        for conformer in complete_conformers:
+            # Pour chaque conformère, chercher les données du calcul neutre
+            if conformer in conformers_data and 'neutral' in conformers_data[conformer]:
+                neutral_calc = conformers_data[conformer]['neutral']
+                if 'HOMO' in neutral_calc and 'LUMO' in neutral_calc and neutral_calc['HOMO'] is not None and neutral_calc['LUMO'] is not None:
                     neutral_orbitals[conformer] = {
-                        'HOMO': energies['HOMO'],
-                        'LUMO': energies['LUMO'],
-                        'Gap': energies['LUMO'] - energies['HOMO']
+                        'HOMO': neutral_calc['HOMO'],
+                        'LUMO': neutral_calc['LUMO'],
+                        'Gap': neutral_calc['LUMO'] - neutral_calc['HOMO']
                     }
 
         # Calculer moyennes pondérées des orbitales
         weighted_homo = 0.0
         weighted_lumo = 0.0
+        total_weight = 0.0  # Pour s'assurer que les poids sont normalisés
+
         for conformer in complete_conformers:
-            if conformer in neutral_orbitals:
+            if conformer in neutral_orbitals and conformer in boltzmann_weights:
                 weight = boltzmann_weights[conformer]
                 weighted_homo += neutral_orbitals[conformer]['HOMO'] * weight
                 weighted_lumo += neutral_orbitals[conformer]['LUMO'] * weight
+                total_weight += weight
 
-        weighted_gap = weighted_lumo - weighted_homo
+        # S'assurer que nous utilisons des moyennes valides
+        if total_weight > 0:
+            weighted_gap = weighted_lumo - weighted_homo
+        else:
+            # Si aucun poids valide n'a été trouvé
+            weighted_homo = 0.0
+            weighted_lumo = 0.0
+            weighted_gap = 0.0
+            print("AVERTISSEMENT: Aucune donnée d'orbitales valide n'a été trouvée pour calculer les moyennes.")
 
         # Afficher les résultats - Réduction
         print("\n=== POTENTIELS DE RÉDUCTION ===")
@@ -982,19 +1317,19 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
         # Afficher les résultats - Oxydation
         print("\n=== POTENTIELS D'OXYDATION ===")
         print(f"E(∆G)   = {potentials['oxidation']['delta_G']:.3f} V")
-        print(f"E(IP)   = {potentials['oxidation']['IP']:.3f} V")
+        print(f"E(EI)   = {potentials['oxidation']['EI']:.3f} V")
         print(f"E(Edef) = {potentials['oxidation']['Edef']:.3f} V")
         print(f"E(∆∆U)  = {potentials['oxidation']['delta_delta_U']:.3f} V")
         print(f"E(T∆S)  = {potentials['oxidation']['T_delta_S']:.3f} V")
 
         # Vérification de la cohérence thermodynamique - Oxydation
-        sum_contributions_ox = (potentials['oxidation']['IP'] +
+        sum_contributions_ox = (potentials['oxidation']['EI'] +
                               potentials['oxidation']['Edef'] +
                               potentials['oxidation']['delta_delta_U'] +
                               potentials['oxidation']['T_delta_S'])
 
         print("\nSomme des contributions (oxydation):")
-        print(f"E(IP) + E(Edef) + E(∆∆U) + E(T∆S) = {sum_contributions_ox:.3f} V")
+        print(f"E(EI) + E(Edef) + E(∆∆U) + E(T∆S) = {sum_contributions_ox:.3f} V")
         print(f"E(∆G) = {potentials['oxidation']['delta_G']:.3f} V")
         print(f"Écart = {potentials['oxidation']['delta_G'] - sum_contributions_ox:.3f} V")
 
@@ -1044,7 +1379,7 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
                 f.write("-" * 50 + "\n")
                 f.write(f"E(∆G) = {potentials['oxidation']['delta_G']:.4f} V\n")
                 f.write("\nContributions:\n")
-                f.write(f"E(IP) = {potentials['oxidation']['IP']:.4f} V\n")
+                f.write(f"E(EI) = {potentials['oxidation']['EI']:.4f} V\n")
                 f.write(f"E(Edef) = {potentials['oxidation']['Edef']:.4f} V\n")
                 f.write(f"E(∆∆U) = {potentials['oxidation']['delta_delta_U']:.4f} V\n")
                 f.write(f"E(T∆S) = {potentials['oxidation']['T_delta_S']:.4f} V\n")
@@ -1061,7 +1396,7 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
                     weight = boltzmann_weights[conformer]
                     e_red = -redox_parameters[conformer]['reduction']['delta_G']/F
                     e_ox = redox_parameters[conformer]['oxidation']['delta_G']/F
-                    f.write(f"{conformer:<15} {weight:.4f} {e_red:15.4f} {e_ox:15.4f}\n")
+                    f.write(f"{conformer:<16} {weight:.4f} {e_red:13.4f} {e_ox:15.4f}\n")
 
                 # === ORBITALES MOLÉCULAIRES ===
                 f.write("\n\n" + "="*50 + "\n")
@@ -1083,7 +1418,7 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
                         homo = neutral_orbitals[conformer]['HOMO']
                         lumo = neutral_orbitals[conformer]['LUMO']
                         gap = neutral_orbitals[conformer]['Gap']
-                        f.write(f"{conformer:<15} {homo:.4f} {lumo:.4f} {gap:.4f}\n")
+                        f.write(f"{conformer:<15} {homo:.4f} {lumo:10.4f} {gap:8.4f}\n")
                     else:
                         f.write(f"{conformer:<15} {'N/A':<15} {'N/A':<15} {'N/A':<15}\n")
 
@@ -1136,6 +1471,7 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
         import traceback
         traceback.print_exc()
         return {}, {}, {}, {}
+
 
 def main():
     """Fonction principale du programme."""
@@ -1190,7 +1526,7 @@ def main():
             job_results[name]['réduit_sp'] = job_reduced_sp
 
             # Step 3: Optimize reduced
-            job_reduced_opt = optimize_reduced(job_neutral, name, args.solvent, args.functional, args.basis)
+            job_reduced_opt = optimize_reduced(job_reduced_sp, name, args.solvent, args.functional, args.basis)
             if not job_reduced_opt:
                 continue
             job_results[name]['réduit_opt'] = job_reduced_opt
@@ -1201,14 +1537,16 @@ def main():
                 continue
             job_results[name]['oxidé_sp'] = job_oxidized_sp
 
-            # Step 3: Optimize oxidized
-            job_oxidized_opt = optimize_oxidized(job_neutral, name, args.solvent, args.functional, args.basis)
+            # Step 5: Optimize oxidized
+            job_oxidized_opt = optimize_oxidized(job_oxidized_sp, name, args.solvent, args.functional, args.basis)
             if not job_oxidized_opt:
                 continue
             job_results[name]['oxidé_opt'] = job_oxidized_opt
 
         except Exception as e:
             print(f"ERREUR lors du traitement de {basename}: {str(e)}")
+            import traceback
+            traceback.print_exc()  # Affiche la trace complète pour faciliter le débogage
             continue
 
     # Analyse RMSD
@@ -1226,6 +1564,7 @@ def main():
 
     # Finalize PLAMS
     finish()
+
 
 if __name__ == "__main__":
     main()
