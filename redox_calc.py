@@ -58,23 +58,15 @@ def setup_workspace(input_dir):
     return workdir
 
 def parse_arguments():
-    """
-    Parse command line arguments
-    """
     parser = argparse.ArgumentParser(
         description="Script pour calculs redox de conformères"
     )
-    parser.add_argument("input_dir", help="Dossier contenant les fichiers .xyz des conformères")
-    parser.add_argument("--solvent", default="Acetonitrile", help="Solvant pour les calculs")
-    
-    # Ajout des paramètres pour le niveau de théorie
-    parser.add_argument("--functional", "-f", default="PBE0", 
-                        help="Fonctionnelle à utiliser pour les calculs (défaut: PBE0)")
-    
-    # Ajout des paramètres pour le basis set
-    parser.add_argument("--basis", "-b", default="DZP", 
-                        help="Basis set à utiliser pour les calculs (défaut: DZP)")
-    
+    parser.add_argument("--input_dir", help="Répertoire des .xyz ou du workdir si mode analysis-only")
+    parser.add_argument("--solvent", default="Acetonitrile", help="Solvant")
+    parser.add_argument("--functional", "-f", default="PBE0", help="Fonctionnelle")
+    parser.add_argument("--basis", "-b", default="DZP", help="Basis set")
+    parser.add_argument("--analysis-only", action="store_true", help="Ne fait que l'extraction d'énergies et l'analyse redox sur un workdir existant")
+    parser.add_argument("--workdir", help="Chemin du dossier PLAMS (redox) si --analysis-only")
     return parser.parse_args()
 
 def configure_functional(s, functional):
@@ -270,7 +262,7 @@ def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", ba
         return job
     else:
         print(f"  ERREUR: Optimisation réduite échouée pour {name}")
-        return None
+        # return None
 
 
 def sp_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
@@ -370,8 +362,8 @@ def check_and_fix_frequencies(job_initial, name, settings, charge=0, spin_polari
         return job_initial, False
 
     # Créer un dossier pour les corrections
-    correction_dir = os.path.join(os.path.dirname(job_initial.path), f"{name}_freq_corrections")
-    os.makedirs(correction_dir, exist_ok=True)
+    # correction_dir = os.path.join(os.path.dirname(job_initial.path), f"{name}_freq_corrections")
+    # os.makedirs(correction_dir, exist_ok=True)
 
     # Vérifier les fréquences imaginaires
     output_file = os.path.join(job_initial.path, f"{job_initial.name}.out")
@@ -1056,7 +1048,7 @@ def extract_engine_energies(workdir_parent):
     return energy_results
 
 
-def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=None):
+def analyze_redox_energies(energy_data, workdir, temperature=298.15, rmsd_export_data=None):
     """
     Analyse les valeurs d'énergie extraites et calcule les paramètres redox.
     """
@@ -1170,11 +1162,11 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
             ox_params = {}
 
             # Paramètres énergétiques pour l'oxydation
-            ox_params['delta_G'] = ox_opt['G'] - neutral['G']
-            ox_params['EI'] = ox_sp['Ee'] - neutral['Ee']  # Potentiel d'ionisation
-            ox_params['Edef'] = ox_opt['Ee'] - ox_sp['Ee']
-            ox_params['delta_delta_U'] = ox_opt['delta_U'] - neutral['delta_U']
-            ox_params['T_delta_S'] = ox_opt['TS'] - neutral['TS']
+            ox_params['delta_G'] = neutral['G'] - ox_opt['G']
+            ox_params['EI'] = neutral['Ee'] - ox_sp['Ee']
+            ox_params['Edef'] = ox_sp['Ee'] - ox_opt['Ee']
+            ox_params['delta_delta_U'] = neutral['delta_U'] - ox_opt['delta_U']
+            ox_params['T_delta_S'] = neutral['TS'] - ox_opt['TS']
 
             # Stocker les paramètres calculés
             redox_parameters[conformer] = {
@@ -1217,7 +1209,6 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
             for conformer in complete_conformers:
                 boltzmann_weights[conformer] = 1.0 / len(complete_conformers)
 
-        # Le reste de la fonction reste identique...
         # Calculer les moyennes pondérées pour la réduction
         avg_params_red = {
             'delta_G': 0.0,
@@ -1343,7 +1334,7 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
         try:
             # Déterminer le chemin du dossier results
             from scm.plams import config
-            workdir = config.default_jobmanager.workdir
+            # workdir = config.default_jobmanager.workdir
             results_dir = os.path.join(workdir, 'redox_results')
 
             # Créer le dossier s'il n'existe pas
@@ -1472,11 +1463,23 @@ def analyze_redox_energies(energy_data, temperature=298.15, rmsd_export_data=Non
         traceback.print_exc()
         return {}, {}, {}, {}
 
-
 def main():
     """Fonction principale du programme."""
     # Parse command line arguments
     args = parse_arguments()
+
+    # Si on est en mode analysis-only, on saute toute la partie calculs
+    if args.analysis_only:
+        if not args.workdir:
+            print("ERREUR: en mode --analysis-only, il faut fournir --workdir")
+            return
+
+        print(">>> Mode ANALYSIS-ONLY: extraction des énergies et calculs redox")
+        # on part du parent du workdir pour extract_engine_energies
+        energy_data = extract_engine_energies(args.workdir)
+        workdir = os.path.join(args.workdir, "redox")
+        analyze_redox_energies(energy_data, workdir=workdir, temperature=298.15)
+        return
 
     # Initialize PLAMS with workspace setup
     workdir = setup_workspace(args.input_dir)
@@ -1515,32 +1518,22 @@ def main():
         try:
             # Step 1: Optimize neutral
             job_neutral = optimize_neutral(mol, name, args.solvent, args.functional, args.basis)
-            if not job_neutral:
-                continue
             job_results[name]['neutre_opt'] = job_neutral
 
             # Step 2: Single point reduced
             job_reduced_sp = sp_reduced(job_neutral, name, args.solvent, args.functional, args.basis)
-            if not job_reduced_sp:
-                continue
             job_results[name]['réduit_sp'] = job_reduced_sp
 
             # Step 3: Optimize reduced
             job_reduced_opt = optimize_reduced(job_reduced_sp, name, args.solvent, args.functional, args.basis)
-            if not job_reduced_opt:
-                continue
             job_results[name]['réduit_opt'] = job_reduced_opt
 
             # Step 4: Single point oxidized
             job_oxidized_sp = sp_oxidized(job_neutral, name, args.solvent, args.functional, args.basis)
-            if not job_oxidized_sp:
-                continue
             job_results[name]['oxidé_sp'] = job_oxidized_sp
 
             # Step 5: Optimize oxidized
             job_oxidized_opt = optimize_oxidized(job_oxidized_sp, name, args.solvent, args.functional, args.basis)
-            if not job_oxidized_opt:
-                continue
             job_results[name]['oxidé_opt'] = job_oxidized_opt
 
         except Exception as e:
@@ -1560,8 +1553,7 @@ def main():
     energy_data = extract_engine_energies(parent_dir)
 
     # Analyser les énergies redox
-    analyze_redox_energies(energy_data, rmsd_export_data=rmsd_export_data)
-
+    analyze_redox_energies(energy_data, workdir=workdir, temperature=298.15, rmsd_export_data=rmsd_export_data)
     # Finalize PLAMS
     finish()
 
