@@ -816,6 +816,203 @@ def compare_conformers_rmsd(job_results):
 
     return rmsd_results, rmsd_export_data
 
+def load_existing_calculations(workdir):
+    """
+    Charge les calculs existants à partir d'un répertoire de travail PLAMS en mode analysis-only,
+    en appliquant une logique de sélection intelligente pour choisir les meilleurs calculs disponibles.
+
+    Règles de priorité:
+    1. Pour les calculs avec corrections: choisir le numéro de correction le plus élevé
+    2. Pour les options pos/neg: priorité à neg puis pos
+    3. Si aucune correction n'est disponible, utiliser la version _opt standard
+
+    Args:
+        workdir (str): Chemin vers le répertoire de travail PLAMS (contenant le dossier 'redox')
+
+    Returns:
+        dict: Dictionnaire contenant les résultats des calculs pour chaque molécule et conformère
+    """
+    print(f"Chargement des calculs existants depuis {workdir}...")
+
+    # S'assurer que le chemin existe
+    if not os.path.exists(workdir) or not os.path.isdir(workdir):
+        raise ValueError(f"Le répertoire {workdir} n'existe pas ou n'est pas un dossier")
+
+    # Définir le chemin du répertoire redox
+    if os.path.basename(workdir) == 'redox':
+        redox_dir = workdir
+    else:
+        redox_dir = os.path.join(workdir, 'redox')
+
+    if not os.path.exists(redox_dir):
+        raise ValueError(f"Le répertoire redox {redox_dir} n'existe pas")
+
+    # Collecter tous les dossiers de calcul disponibles
+    calc_dirs = [d for d in os.listdir(redox_dir)
+               if os.path.isdir(os.path.join(redox_dir, d)) and
+               "_conf_" in d and
+               os.path.exists(os.path.join(redox_dir, d, 'ams.rkf'))]
+
+    # Organiser les dossiers par molécule, conformère et type de calcul
+    organized_calcs = {}  # Structure: {mol_name: {conf_num: {job_type: [dirs]}}}
+
+    for calc_dir in calc_dirs:
+        try:
+            # Analyser le nom du dossier pour extraire les composants
+            parts = calc_dir.split('_')
+
+            # Trouver l'index du "conf"
+            if "conf" not in parts:
+                continue
+            conf_idx = parts.index("conf")
+
+            # Extraire les informations
+            mol_name_parts = parts[:conf_idx-1]  # Tous les éléments avant "conf"
+            mol_name = "_".join(mol_name_parts)
+            conf_num = parts[conf_idx+1]  # Numéro après "conf"
+
+            # Déterminer le type de calcul (neutre, reduit, oxidé)
+            job_type = None
+            for job in ["neutre", "reduit", "oxidé"]:
+                if job in parts:
+                    job_type = job
+                    break
+
+            if not job_type:
+                continue  # Ignorer si pas de type reconnu
+
+            # Initialiser la structure si nécessaire
+            if mol_name not in organized_calcs:
+                organized_calcs[mol_name] = {}
+            if conf_num not in organized_calcs[mol_name]:
+                organized_calcs[mol_name][conf_num] = {}
+            if job_type not in organized_calcs[mol_name][conf_num]:
+                organized_calcs[mol_name][conf_num][job_type] = []
+
+            # Ajouter ce calcul à la liste
+            organized_calcs[mol_name][conf_num][job_type].append(calc_dir)
+
+        except Exception as e:
+            print(f"Erreur lors de l'analyse du dossier {calc_dir}: {str(e)}")
+            continue
+
+    # Initialiser le dictionnaire des résultats
+    job_results = {}
+
+    # Sélectionner les meilleurs calculs et les charger
+    for mol_name, conformers in organized_calcs.items():
+        for conf_num, job_types in conformers.items():
+            conformer_name = f"{mol_name}_conf_{conf_num}"
+            job_results[conformer_name] = {}
+
+            print(f"\nTraitement du conformère: {conformer_name}")
+
+            for job_type, calc_dirs in job_types.items():
+                # Sélectionner le meilleur calcul pour ce type
+                best_calc = select_best_calculation(calc_dirs)
+
+                if best_calc:
+                    # Normaliser le type de job pour la sortie finale
+                    # Corriger "reduit" en "réduit" avec accent pour la compatibilité
+                    normalized_job_type = job_type
+                    if job_type == "reduit":
+                        normalized_job_type = "réduit"
+
+                    output_job_type = f"{normalized_job_type}_opt"
+
+                    try:
+                        # Charger le calcul
+                        ams_rkf_path = os.path.join(redox_dir, best_calc, 'ams.rkf')
+                        loaded_job = AMSJob.load_external(ams_rkf_path)
+
+                        # Vérifier que le job est valide
+                        if loaded_job and loaded_job.ok():
+                            job_results[conformer_name][output_job_type] = loaded_job
+                            print(f"  Chargé: {output_job_type} depuis {best_calc}")
+                        else:
+                            print(f"  Erreur: Le job {output_job_type} ({best_calc}) n'est pas valide")
+                            job_results[conformer_name][output_job_type] = None
+                    except Exception as e:
+                        print(f"  Erreur lors du chargement de {best_calc}: {str(e)}")
+                        job_results[conformer_name][output_job_type] = None
+                else:
+                    normalized_job_type = job_type
+                    if job_type == "reduit":
+                        normalized_job_type = "réduit"
+
+                    output_job_type = f"{normalized_job_type}_opt"
+                    print(f"  Aucun calcul valide trouvé pour {output_job_type}")
+                    job_results[conformer_name][output_job_type] = None
+
+    # Afficher un résumé
+    print("\nRésumé des calculs chargés:")
+    total_loaded = 0
+    for conformer, jobs in job_results.items():
+        loaded_jobs = sum(1 for job in jobs.values() if job is not None)
+        total_loaded += loaded_jobs
+        print(f"{conformer}: {loaded_jobs}/{len(jobs)} calculs chargés")
+
+    print(f"\nTotal: {total_loaded} calculs chargés")
+
+    return job_results
+
+def select_best_calculation(calc_dirs):
+    """
+    Sélectionne le meilleur calcul parmi une liste de dossiers selon les priorités:
+    1. Correction avec numéro le plus élevé
+    2. Préférence pour 'neg' sur 'pos'
+    3. Calcul standard si aucun calcul corrigé n'est disponible
+
+    Args:
+        calc_dirs (list): Liste des noms de dossiers de calculs
+
+    Returns:
+        str: Nom du meilleur dossier, ou None si aucun dossier valide
+    """
+    if not calc_dirs:
+        return None
+
+    # Séparer les calculs standards et les calculs corrigés
+    standard = []
+    corrected_info = []  # Liste de tuples (dir_name, corr_num, is_neg, is_pos)
+
+    for dir_name in calc_dirs:
+        parts = dir_name.split('_')
+
+        # Vérifier s'il s'agit d'un calcul standard (se termine par _opt)
+        if "corr" not in parts and dir_name.endswith("_opt"):
+            standard.append(dir_name)
+            continue
+
+        # Traiter les calculs corrigés
+        try:
+            # Trouver l'index de "corr"
+            if "corr" in parts:
+                corr_idx = parts.index("corr")
+                corr_num = int(parts[corr_idx + 1])
+
+                # Déterminer si pos ou neg
+                is_neg = "neg" in parts
+                is_pos = "pos" in parts
+
+                corrected_info.append((dir_name, corr_num, is_neg, is_pos))
+        except (ValueError, IndexError):
+            # Si nous ne pouvons pas extraire correctement l'info, on l'ignore
+            continue
+
+    # Trier selon les priorités: numéro de correction décroissant, puis neg > pos
+    if corrected_info:
+        sorted_info = sorted(corrected_info,
+                             key=lambda x: (-x[1], x[2], -x[3]))  # -x[1] pour trier par corr_num décroissant
+        return sorted_info[0][0]  # Retourner le nom du meilleur dossier
+
+    # Si aucun calcul corrigé n'est disponible ou valide, utiliser le calcul standard
+    if standard:
+        return standard[0]
+
+    # Si rien n'est disponible, retourner le premier de la liste originale
+    return calc_dirs[0] if calc_dirs else None
+
 def export_molecules(jobs_data, prefix="redox_results"):
     """
     Exporte les fichiers de sortie .out dans un sous-dossier spécifique du dossier de travail PLAMS
@@ -1476,9 +1673,11 @@ def main():
 
         print(">>> Mode ANALYSIS-ONLY: extraction des énergies et calculs redox")
         # on part du parent du workdir pour extract_engine_energies
+        job_results = load_existing_calculations(args.workdir)
+        rmsd_results, rmsd_export_data = compare_conformers_rmsd(job_results)
         energy_data = extract_engine_energies(args.workdir)
         workdir = os.path.join(args.workdir, "redox")
-        analyze_redox_energies(energy_data, workdir=workdir, temperature=298.15)
+        analyze_redox_energies(energy_data, workdir=workdir, temperature=298.15, rmsd_export_data=rmsd_export_data)
         return
 
     # Initialize PLAMS with workspace setup
