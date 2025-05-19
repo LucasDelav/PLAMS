@@ -1724,7 +1724,7 @@ def main():
             job_results[name]['réduit_sp'] = job_reduced_sp
 
             # Step 3: Optimize reduced
-            job_reduced_opt = optimize_reduced(job_reduced_sp, name, args.solvent, args.functional, args.basis)
+            job_reduced_opt = optimize_reduced(job_neutral, name, args.solvent, args.functional, args.basis)
             job_results[name]['réduit_opt'] = job_reduced_opt
 
             # Step 4: Single point oxidized
@@ -1732,7 +1732,7 @@ def main():
             job_results[name]['oxidé_sp'] = job_oxidized_sp
 
             # Step 5: Optimize oxidized
-            job_oxidized_opt = optimize_oxidized(job_oxidized_sp, name, args.solvent, args.functional, args.basis)
+            job_oxidized_opt = optimize_oxidized(job_neutral, name, args.solvent, args.functional, args.basis)
             job_results[name]['oxidé_opt'] = job_oxidized_opt
 
         except Exception as e:

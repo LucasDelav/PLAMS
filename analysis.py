@@ -303,6 +303,10 @@ def create_correlation_plot(data_list, output_dir, regression_types):
          'x_label': 'Edef (V)', 'y_label': 'ΔE (V)'},
         {'x_key': 'E_ox_Edef', 'y_key': 'E_ox_deltaG', 'title': 'Corrélation Edef vs ΔE (Oxydation)',
          'x_label': 'Edef (V)', 'y_label': 'ΔE (V)'},
+        {'x_key': 'HOMO', 'y_key': 'E_ox_deltaG', 'title': 'Corrélation HOMO vs ΔE (Oxydation)',
+         'x_label': 'HOMO (eV)', 'y_label': 'ΔE (V)'},
+        {'x_key': 'LUMO', 'y_key': 'E_red_deltaG', 'title': 'Corrélation LUMO vs ΔE (Réduction)',
+         'x_label': 'LUMO (eV)', 'y_label': 'ΔE (V)'},
         {'x_key': 'HOMO', 'y_key': 'E_ox_EI', 'title': 'Corrélation HOMO vs EI',
          'x_label': 'HOMO (eV)', 'y_label': 'EI (V)'},
         {'x_key': 'LUMO', 'y_key': 'E_red_EA', 'title': 'Corrélation LUMO vs EA',
@@ -333,6 +337,9 @@ def create_correlation_plot(data_list, output_dir, regression_types):
         'logarithmic': add_logarithmic_regression
     }
     
+    plt.rcParams['font.family'] = 'serif'
+    plt.rcParams["legend.framealpha"] = 0.5
+
     # Créer un graphique pour chaque corrélation
     for corr in correlations:
         # Extraire les données pour cette corrélation
@@ -388,8 +395,6 @@ def create_correlation_plot(data_list, output_dir, regression_types):
                     continue
         
         # Configurer le graphique
-        plt.rcParams['font.family'] = 'serif'
-        plt.rcParams["legend.framealpha"] = 0.5
         ax.set_xlabel(corr['x_label'], fontsize=12)
         ax.set_ylabel(corr['y_label'], fontsize=12)
         ax.set_title(corr['title'], fontsize=14)
