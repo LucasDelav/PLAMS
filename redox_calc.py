@@ -992,10 +992,12 @@ def select_best_calculation(calc_dirs):
                 corr_num = int(parts[corr_idx + 1])
 
                 # Déterminer si pos ou neg
-                is_neg = "neg" in parts
-                is_pos = "pos" in parts
+                if "neg" in parts:
+                    neg_or_pos = 0
+                elif "pos" in parts:
+                    neg_or_pos = 1
 
-                corrected_info.append((dir_name, corr_num, is_neg, is_pos))
+                corrected_info.append((dir_name, corr_num, neg_or_pos))
         except (ValueError, IndexError):
             # Si nous ne pouvons pas extraire correctement l'info, on l'ignore
             continue
@@ -1003,7 +1005,7 @@ def select_best_calculation(calc_dirs):
     # Trier selon les priorités: numéro de correction décroissant, puis neg > pos
     if corrected_info:
         sorted_info = sorted(corrected_info,
-                             key=lambda x: (-x[1], x[2], -x[3]))  # -x[1] pour trier par corr_num décroissant
+                             key=lambda x: (-x[1], x[2]))  # -x[1] pour trier par corr_num décroissant
         return sorted_info[0][0]  # Retourner le nom du meilleur dossier
 
     # Si aucun calcul corrigé n'est disponible ou valide, utiliser le calcul standard

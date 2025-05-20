@@ -83,20 +83,100 @@ def parse_redox_file(filepath):
     if mo_match:
         data['HOMO'] = float(mo_match.group(1))
         data['LUMO'] = float(mo_match.group(2))
-    
+
+    # Extraction des poids des conformères
+    conf_pattern = r"Conform.*?Poids.*?\n-+\n([a-zA-Z\d_\s.-]+)\n\n\n"
+    conf_match = re.search(conf_pattern, content, re.DOTALL)
+
+    if conf_match:
+        # Extraire les lignes de conformères et leurs poids
+        conf_lines = conf_match.group(1).strip().split('\n')
+        weights = []
+        conf_names = []
+
+        for line in conf_lines:
+            parts = line.split()
+            if len(parts) >= 4:  # Nom, poids, E_red, E_ox
+                conf_names.append(parts[0])
+                weights.append(float(parts[1]))
+
+        # Trouver l'indice du conformère avec le poids le plus élevé
+        if weights:
+            max_weight_idx = weights.index(max(weights))
+            data['max_weight_conformer'] = conf_names[max_weight_idx]
+            data['max_weight'] = weights[max_weight_idx]
+
+    # Extraction des RMSD des conformères réduits
+    rmsd_red_pattern = r"CONFORMÈRES RÉDUITS\n.+\s+\n[-]+\n((?:.*?\s+.*?\s+[\d.]+\n)+)"
+    rmsd_red_match = re.search(rmsd_red_pattern, content, re.DOTALL)
+
+    if rmsd_red_match:
+        rmsd_red_lines = rmsd_red_match.group(1).strip().split('\n')
+        rmsd_red_values = {}
+
+        for line in rmsd_red_lines:
+            parts = line.split()
+            if len(parts) >= 3:  # conf_red, conf_neutre, rmsd
+                conf_red = parts[0].strip()
+                conf_neutre = parts[1].strip()
+                rmsd = float(parts[2])
+                rmsd_red_values[conf_red] = (conf_neutre, rmsd)
+
+        # Si nous avons un conformère de poids maximal, trouver son RMSD
+        if 'max_weight_conformer' in data:
+            # Trouver le conformère réduit qui correspond au conformère neutre de poids maximal
+            best_rmsd = None
+            for conf_red, (conf_neutre, rmsd) in rmsd_red_values.items():
+                # Vérifier si ce conformère réduit correspond au conformère neutre de poids maximal
+                if data['max_weight_conformer'].endswith(conf_neutre):
+                    if best_rmsd is None or rmsd < best_rmsd:
+                        best_rmsd = rmsd
+
+            if best_rmsd is not None:
+                data['rmsd_red'] = best_rmsd
+
+    # Extraction des RMSD des conformères oxydés
+    rmsd_ox_pattern = r"CONFORMÈRES OXIDÉS\n.+\s+\n[-]+\n((?:.*?\s+.*?\s+[\d.]+\n)+)"
+    rmsd_ox_match = re.search(rmsd_ox_pattern, content, re.DOTALL)
+
+    if rmsd_ox_match:
+        rmsd_ox_lines = rmsd_ox_match.group(1).strip().split('\n')
+        rmsd_ox_values = {}
+
+        for line in rmsd_ox_lines:
+            parts = line.split()
+            if len(parts) >= 3:  # conf_ox, conf_neutre, rmsd
+                conf_ox = parts[0].strip()
+                conf_neutre = parts[1].strip()
+                rmsd = float(parts[2])
+                rmsd_ox_values[conf_ox] = (conf_neutre, rmsd)
+
+        # Si nous avons un conformère de poids maximal, trouver son RMSD
+        if 'max_weight_conformer' in data:
+            # Trouver le conformère oxydé qui correspond au conformère neutre de poids maximal
+            best_rmsd = None
+            for conf_ox, (conf_neutre, rmsd) in rmsd_ox_values.items():
+                # Vérifier si ce conformère oxydé correspond au conformère neutre de poids maximal
+                if data['max_weight_conformer'].endswith(conf_neutre):
+                    if best_rmsd is None or rmsd < best_rmsd:
+                        best_rmsd = rmsd
+
+            if best_rmsd is not None:
+                data['rmsd_ox'] = best_rmsd
+
     # Vérification des données extraites
     expected_keys = ['E_red_deltaG', 'E_red_EA', 'E_red_Edef', 'E_red_deltaU', 'E_red_TdeltaS',
                      'E_ox_deltaG', 'E_ox_EI', 'E_ox_Edef', 'E_ox_deltaU', 'E_ox_TdeltaS',
-                     'HOMO', 'LUMO']
-    
+                     'HOMO', 'LUMO', 'rmsd_red', 'rmsd_ox']
+
     missing_keys = [key for key in expected_keys if key not in data]
     if missing_keys:
         print(f"Avertissement: Les données suivantes n'ont pas pu être extraites: {', '.join(missing_keys)}")
-    
+
     # Extraire le nom de la molécule depuis le chemin
-    mol_name = filepath.split("_")
-    data['molecule'] = mol_name[0]
-    
+    mol_name = filepath.split("_")[0]
+    data['molecule'] = mol_name
+
     return data
 
 def add_linear_regression(ax, x, y, color='red', label='Linéaire'):
@@ -310,7 +390,11 @@ def create_correlation_plot(data_list, output_dir, regression_types):
         {'x_key': 'HOMO', 'y_key': 'E_ox_EI', 'title': 'Corrélation HOMO vs EI',
          'x_label': 'HOMO (eV)', 'y_label': 'EI (V)'},
         {'x_key': 'LUMO', 'y_key': 'E_red_EA', 'title': 'Corrélation LUMO vs EA',
-         'x_label': 'LUMO (eV)', 'y_label': 'EA (V)'}
+         'x_label': 'LUMO (eV)', 'y_label': 'EA (V)'},
+        {'x_key': 'rmsd_red', 'y_key': 'E_red_Edef', 'title': 'Corrélation RMSD vs Edef (Réduction)',
+         'x_label': 'RMSD (Å)', 'y_label': 'Edef (V)'},
+        {'x_key': 'rmsd_ox', 'y_key': 'E_ox_Edef', 'title': 'Corrélation RMSD vs Edef (Oxydation)',
+         'x_label': 'RMSD (Å)', 'y_label': 'Edef (V)'}
     ]
     
     # Couleurs pour les différents types de régression
