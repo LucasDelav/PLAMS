@@ -361,10 +361,6 @@ def check_and_fix_frequencies(job_initial, name, settings, charge=0, spin_polari
         print(f"  ERREUR: Le job initial {job_initial.name} a échoué, impossible de vérifier les fréquences")
         return job_initial, False
 
-    # Créer un dossier pour les corrections
-    # correction_dir = os.path.join(os.path.dirname(job_initial.path), f"{name}_freq_corrections")
-    # os.makedirs(correction_dir, exist_ok=True)
-
     # Vérifier les fréquences imaginaires
     output_file = os.path.join(job_initial.path, f"{job_initial.name}.out")
     imaginary_modes = extract_imaginary_modes(output_file)
@@ -416,9 +412,6 @@ def check_and_fix_frequencies(job_initial, name, settings, charge=0, spin_polari
                         name=f"{name}_corr_{attempt}_pos",
                         molecule=pos_perturbed_mol)
 
-        # Définir le répertoire de travail pour ce job
-        # job_pos.settings.runscript.pre = f"mkdir -p {correction_dir}/{job_pos.name}\ncd {correction_dir}/{job_pos.name}"
-
         # Exécuter le calcul
         job_pos.run()
         pos_success = job_pos.check()
@@ -437,9 +430,6 @@ def check_and_fix_frequencies(job_initial, name, settings, charge=0, spin_polari
         job_neg = AMSJob(settings=settings_copy,
                         name=f"{name}_corr_{attempt}_neg",
                         molecule=neg_perturbed_mol)
-
-        # Définir le répertoire de travail pour ce job
-        # job_neg.settings.runscript.pre = f"mkdir -p {correction_dir}/{job_neg.name}\ncd {correction_dir}/{job_neg.name}"
 
         # Exécuter le calcul
         job_neg.run()
