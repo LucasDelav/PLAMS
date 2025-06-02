@@ -8,6 +8,7 @@ import numpy as np
 import re
 import shutil
 from scm.plams import *
+from scm.plams.interfaces.adfsuite.scmjob import SCMJob, SCMResults
 
 # Constantes physiques
 F = 96485.33212  # Constante de Faraday en C/mol
@@ -150,7 +151,6 @@ def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=
 
     return s
 
-
 def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
     Étape 1: Optimisation géométrique de la molécule neutre
@@ -176,21 +176,13 @@ def optimize_neutral(mol, name, solvent="Acetonitrile", functional="PBE0", basis
     job = AMSJob(settings=settings, name=f"{name}_neutre_opt", molecule=mol)
     job.run()
     
-    if job.check():
-        print(f"  Optimisation neutre réussie pour {name}")
-        
-        print(f"  Vérification des fréquences imaginaires...")
-        job, fixed = check_and_fix_frequencies(job, f"{name}_neutre", settings, charge=0, max_attempts=max_attempts)
-        if fixed:
-            print(f"  Structure sans fréquence imaginaire obtenue pour {name} (neutre)")
-        else:
-            print(f"  AVERTISSEMENT: Des fréquences imaginaires persistent pour {name} (neutre)")
-        return job
+    job, fixed = check_and_fix_frequencies(job, f"{name}_neutre", settings, charge=0, max_attempts=max_attempts)
+    if fixed:
+        print(f"  Structure sans fréquence imaginaire obtenue pour {name} (neutre)")
     else:
-        print(f"  ERREUR: Optimisation neutre échouée pour {name}")
-        return None
-
-
+        print(f"  AVERTISSEMENT: Des fréquences imaginaires persistent pour {name} (neutre)")
+    return job
+    
 def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
     Étape 2: Calcul en simple point de la molécule réduite (charge -1)
@@ -216,13 +208,7 @@ def sp_reduced(job_neutral, name, solvent="Acetonitrile", functional="PBE0", bas
     job = AMSJob(settings=settings, name=f"{name}_reduit_sp", molecule=mol_opt)
     job.run()
 
-    if job.check():
-        print(f"  Calcul simple point réussi pour {name} (réduit)")
-        return job
-    else:
-        print(f"  ERREUR: Calcul simple point échoué pour {name} (réduit)")
-        return None
-
+    return job
 
 def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
@@ -249,21 +235,13 @@ def optimize_reduced(job_sp, name, solvent="Acetonitrile", functional="PBE0", ba
     job = AMSJob(settings=settings, name=f"{name}_reduit_opt", molecule=mol_opt)
     job.run()
 
-    if job.check():
-        print(f"  Optimisation réduite réussie pour {name}")
-
-        print(f"  Vérification des fréquences imaginaires...")
-        job, fixed = check_and_fix_frequencies(job, f"{name}_reduit", settings,
+    job, fixed = check_and_fix_frequencies(job, f"{name}_reduit", settings,
                                               charge=-1, spin_polarization=1.0, max_attempts=max_attempts)
-        if fixed:
-            print(f"  Structure sans fréquence imaginaire obtenue pour {name} (réduit)")
-        else:
-            print(f"  AVERTISSEMENT: Des fréquences imaginaires persistent pour {name} (réduit)")
-        return job
+    if fixed:
+        print(f"  Structure sans fréquence imaginaire obtenue pour {name} (réduit)")
     else:
-        print(f"  ERREUR: Optimisation réduite échouée pour {name}")
-        # return None
-
+        print(f"  AVERTISSEMENT: Des fréquences imaginaires persistent pour {name} (réduit)")
+    return job
 
 def sp_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
@@ -290,13 +268,7 @@ def sp_oxidized(job_neutral, name, solvent="Acetonitrile", functional="PBE0", ba
     job = AMSJob(settings=settings, name=f"{name}_oxidé_sp", molecule=mol_opt)
     job.run()
 
-    if job.check():
-        print(f"  Calcul simple point réussi pour {name} (oxidé)")
-        return job
-    else:
-        print(f"  ERREUR: Calcul simple point échoué pour {name} (oxidé)")
-        return None
-
+    return job
 
 def optimize_oxidized(job_sp, name, solvent="Acetonitrile", functional="PBE0", basis="DZP", max_attempts=3):
     """
@@ -323,21 +295,13 @@ def optimize_oxidized(job_sp, name, solvent="Acetonitrile", functional="PBE0", b
     job = AMSJob(settings=settings, name=f"{name}_oxidé_opt", molecule=mol_opt)
     job.run()
     
-    if job.check():
-        print(f"  Optimisation oxidée réussie pour {name}")
-        
-        print(f"  Vérification des fréquences imaginaires...")
-        job, fixed = check_and_fix_frequencies(job, f"{name}_oxidé", settings, 
+    job, fixed = check_and_fix_frequencies(job, f"{name}_oxidé", settings, 
                                               charge=+1, spin_polarization=1.0, max_attempts=max_attempts)
-        if fixed:
-            print(f"  Structure sans fréquence imaginaire obtenue pour {name} (oxidé)")
-        else:
-            print(f"  AVERTISSEMENT: Des fréquences imaginaires persistent pour {name} (oxidé)")
-        return job
+    if fixed:
+        print(f"  Structure sans fréquence imaginaire obtenue pour {name} (oxidé)")
     else:
-        print(f"  ERREUR: Optimisation oxidée échouée pour {name}")
-        return None
-
+        print(f"  AVERTISSEMENT: Des fréquences imaginaires persistent pour {name} (oxidé)")
+    return job
 
 def check_and_fix_frequencies(job_initial, name, settings, charge=0, spin_polarization=0, max_attempts=3):
     """
@@ -357,9 +321,9 @@ def check_and_fix_frequencies(job_initial, name, settings, charge=0, spin_polari
             - fixed_successfully: Booléen indiquant si toutes les fréquences imaginaires ont été corrigées
     """
     # S'assurer que le calcul initial a réussi
-    if not job_initial.check():
-        print(f"  ERREUR: Le job initial {job_initial.name} a échoué, impossible de vérifier les fréquences")
-        return job_initial, False
+    #if not job_initial.check():
+        #print(f"  ERREUR: Le job initial {job_initial.name} a échoué, impossible de vérifier les fréquences")
+        #return job_initial, False
 
     # Vérifier les fréquences imaginaires
     output_file = os.path.join(job_initial.path, f"{job_initial.name}.out")
