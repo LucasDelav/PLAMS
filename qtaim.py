@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import re
 import sys
 import glob
 import argparse
@@ -42,7 +41,7 @@ def extract_coordinates(base_path):
     """
     molecules = []
     
-    pattern = os.path.join(base_path, 'redox', "*_conf_*_neutre*/output.xyz")
+    pattern = os.path.join(base_path, "*_conf_*_neutre*/output.xyz")
     xyz_files = glob.glob(pattern)
     
     if not xyz_files:
@@ -167,148 +166,6 @@ def extract_bader_charges(job, conf_name, state):
         print(f"Erreur lors de l'accès au fichier KF pour {conf_name} ({state}): {e}")
 
     return charges
-
-def extract_iqa_energies(job, conf_name, state):
-    """
-    Extrait les énergies IQA additives à partir des résultats du job AMS.
-
-    Args:
-        job (AMSJob): Le job AMS exécuté.
-        conf_name (str): Nom du conformère.
-        state (str): État de la molécule ('neutre', 'oxidized', 'reduced').
-
-    Returns:
-        dict: Dictionnaire contenant les énergies IQA additives par atome et le total.
-    """
-    iqa_data = {}
-
-    try:
-        # Obtenir le chemin du fichier de sortie
-        output_file = job.results.job.path + "/" + job.name + ".out"
-
-        if not os.path.exists(output_file):
-            print(f"Fichier de sortie non trouvé: {output_file}")
-            return iqa_data
-
-        # Lire le fichier ligne par ligne pour éviter de charger tout en mémoire
-        atomic_energies = {}
-        total_energy = None
-        in_additive_section = False
-
-        with open(output_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-
-                # Détecter le début de la section IQA
-                if "C - Additive IQA Energies" in line:
-                    in_additive_section = True
-                    continue
-
-                # Si on est dans la section et qu'on trouve une ligne d'atome
-                if in_additive_section and line.startswith("Atom "):
-                    # Découper la ligne : "Atom C1     * EaddIQA   =     -38.113457"
-                    parts = line.split()
-                    if len(parts) >= 5 and parts[2] == "*" and parts[3] == "EaddIQA" and parts[4] == "=":
-                        atom_label = parts[1]  # Ex: "C1", "O3", "H4"
-                        energy_str = parts[5]  # Ex: "-38.113457"
-
-                        try:
-                            energy = float(energy_str)
-
-                            # Extraire le symbole et l'indice de l'atome avec split
-                            atom_symbol = ""
-                            atom_number_str = ""
-
-                            # Séparer lettres et chiffres manuellement
-                            for char in atom_label:
-                                if char.isalpha():
-                                    atom_symbol += char
-                                elif char.isdigit():
-                                    atom_number_str += char
-
-                            if atom_symbol and atom_number_str:
-                                atom_index = int(atom_number_str)
-
-                                atomic_energies[atom_index] = {
-                                    'symbol': atom_symbol,
-                                    'label': atom_label,
-                                    'EaddIQA': energy
-                                }
-
-                        except ValueError:
-                            continue
-
-                # Détecter la ligne Total et sortir
-                elif in_additive_section and line.startswith("Total"):
-                    # Découper : "Total                   =    -154.929122"
-                    parts = line.split("=")
-                    if len(parts) == 2:
-                        total_str = parts[1].strip()
-                        try:
-                            total_energy = float(total_str)
-                            # Fin de la section - sortir de la boucle
-                            break
-                        except ValueError:
-                            continue
-
-        # Assembler les résultats
-        if atomic_energies and total_energy is not None:
-            iqa_data = {
-                'atomic_energies': atomic_energies,
-                'total_energy': total_energy
-            }
-            print(f"Énergies IQA additives extraites pour {conf_name} ({state}): {len(atomic_energies)} atomes")
-        else:
-            print(f"Section 'Additive IQA Energies' non trouvée ou incomplète pour {conf_name} ({state})")
-
-    except Exception as e:
-        print(f"Erreur lors de l'extraction IQA pour {conf_name} ({state}): {e}")
-
-    return iqa_data
-
-def calculate_iqa_differences(neutral_iqa, oxidized_iqa, reduced_iqa):
-    """
-    Calcule les différences d'énergies IQA additives.
-
-    Returns:
-        dict: Dictionnaire avec les différences par atome et les totaux.
-    """
-    iqa_differences = {}
-
-    neutral_atomic = neutral_iqa.get('atomic_energies', {})
-    oxidized_atomic = oxidized_iqa.get('atomic_energies', {})
-    reduced_atomic = reduced_iqa.get('atomic_energies', {})
-
-    # Différences atomiques
-    atomic_deltas = {}
-    for atom_idx in neutral_atomic:
-        if atom_idx in oxidized_atomic and atom_idx in reduced_atomic:
-            neutral_energy = neutral_atomic[atom_idx]['EaddIQA']
-            oxidized_energy = oxidized_atomic[atom_idx]['EaddIQA']
-            reduced_energy = reduced_atomic[atom_idx]['EaddIQA']
-
-            atomic_deltas[atom_idx] = {
-                'label': neutral_atomic[atom_idx]['label'],
-                'symbol': neutral_atomic[atom_idx]['symbol'],
-                'delta_ox': oxidized_energy - neutral_energy,
-                'delta_red': reduced_energy - neutral_energy
-            }
-
-    # Différences totales
-    neutral_total = neutral_iqa.get('total_energy', 0)
-    oxidized_total = oxidized_iqa.get('total_energy', 0)
-    reduced_total = reduced_iqa.get('total_energy', 0)
-
-    iqa_differences = {
-        'atomic_deltas': atomic_deltas,
-        'total_delta_ox': oxidized_total - neutral_total,
-        'total_delta_red': reduced_total - neutral_total,
-        'neutral_total': neutral_total,
-        'oxidized_total': oxidized_total,
-        'reduced_total': reduced_total
-    }
-
-    return iqa_differences
 
 def create_charge_difference_plots(df, conf_name, output_dir):
     """
@@ -446,38 +303,28 @@ def calculate_charge_differences(neutral_jobs, oxidized_jobs, reduced_jobs, plam
         # Créer des graphiques pour visualisation
         create_charge_difference_plots(df, conf_name, charge_dir)
 
-        # NOUVELLE SECTION - Extraire les énergies IQA
-        print(f"Extraction des énergies IQA additives pour {conf_name}...")
-        neutral_iqa = extract_iqa_energies(neutral_job, conf_name, 'neutre')
-        oxidized_iqa = extract_iqa_energies(oxidized_job, conf_name, 'oxidized')
-        reduced_iqa = extract_iqa_energies(reduced_job, conf_name, 'reduced')
+        # Produire et sauvegarder les statistiques
+        analyze_charge_statistics(df, conf_name, charge_dir)
 
-        # Calculer les différences IQA si toutes les données sont disponibles
-        iqa_differences = None
-        if neutral_iqa and oxidized_iqa and reduced_iqa:
-            iqa_differences = calculate_iqa_differences(neutral_iqa, oxidized_iqa, reduced_iqa)
-            print(f"Différences IQA calculées pour {conf_name}")
+        plot_charge_differences_on_molecule_enhanced(
+            molecule=neutral_job.molecule,
+            neutral_charges=neutral_charges,
+            oxidized_charges=oxidized_charges,
+            reduced_charges=reduced_charges,
+            conf_name=conf_name,
+            output_dir=charge_dir)
 
-        # Produire et sauvegarder les statistiques AVEC les données IQA
-        analyze_charge_statistics(df, conf_name, charge_dir, iqa_differences)
-        
-        # plot_charge_differences_on_molecule_enhanced(
-        #     molecule=neutral_job.molecule,
-        #     neutral_charges=neutral_charges,
-        #     oxidized_charges=oxidized_charges,
-        #     reduced_charges=reduced_charges,
-        #     conf_name=conf_name,
-        #     output_dir=charge_dir)
-
-def analyze_charge_statistics(df, conf_name, output_dir, iqa_differences=None):
+def analyze_charge_statistics(df, conf_name, output_dir):
     """
-    Analyse statistique des différences de charges avec données IQA optionnelles.
+    Analyse statistique des différences de charges.
 
     Args:
         df (DataFrame): DataFrame contenant les données de charges.
         conf_name (str): Nom du conformère.
         output_dir (str): Répertoire de sortie pour les statistiques.
-        iqa_differences (dict): Données IQA optionnelles.
+
+    Returns:
+        dict: Dictionnaire contenant les statistiques calculées.
     """
     # Créer un dictionnaire pour stocker les statistiques
     stats = {}
@@ -544,6 +391,28 @@ def analyze_charge_statistics(df, conf_name, output_dir, iqa_differences=None):
     # Somme des différences de charge (devrait être proche de -1.0 pour la réduction)
     stats['sum_red'] = df['Δ(q) Red-Neu'].sum()
 
+    # ---- STATISTIQUES AVANCÉES ----
+    # Corrélation entre les profils d'oxydation et de réduction
+    stats['correlation_ox_red'] = df['Δ(q) Ox-Neu'].corr(df['Δ(q) Red-Neu'])
+
+    # Calcul du "impact atomique" - proportion de l'effet total que chaque atome porte
+    df['Impact Ox (%)'] = (df['Δ(q) Ox-Neu'] / df['Δ(q) Ox-Neu'].sum()) * 100
+    df['Impact Red (%)'] = (df['Δ(q) Red-Neu'] / df['Δ(q) Red-Neu'].sum()) * 100
+
+    # Top 3 atomes avec le plus d'impact pour l'oxydation
+    top3_ox = df.sort_values(by='Impact Ox (%)', ascending=False).head(3)
+    stats['top3_impact_ox'] = [
+        f"{row['Atom Symbol']}{row['Atom Index']} ({row['Impact Ox (%)']:.1f}%)"
+        for _, row in top3_ox.iterrows()
+    ]
+
+    # Top 3 atomes avec le plus d'impact pour la réduction
+    top3_red = df.sort_values(by='Impact Red (%)', ascending=False).head(3)
+    stats['top3_impact_red'] = [
+        f"{row['Atom Symbol']}{row['Atom Index']} ({row['Impact Red (%)']:.1f}%)"
+        for _, row in top3_red.iterrows()
+    ]
+
     # Écrire les statistiques dans un fichier
     stats_file = os.path.join(output_dir, f'{conf_name}_charge_statistics.txt')
     with open(stats_file, 'w') as f:
@@ -558,6 +427,9 @@ def analyze_charge_statistics(df, conf_name, output_dir, iqa_differences=None):
         f.write(f"Moyenne des charges négatives: {stats['mean_negative_ox']:.4f} (sur {stats['count_negative_ox']} atomes)\n")
         f.write(f"Écart-type: {stats['std_ox']:.4f}\n")
         f.write(f"Somme totale: {stats['sum_ox']:.4f} (attendu: +1 e)\n")
+        f.write("\nTop 3 atomes contribuant le plus à l'oxydation:\n")
+        for i, atom in enumerate(stats['top3_impact_ox'], 1):
+            f.write(f"{i}. {atom}\n")
 
         f.write("\nSTATISTIQUES DE RÉDUCTION\n")
         f.write("-"*30 + "\n")
@@ -567,63 +439,15 @@ def analyze_charge_statistics(df, conf_name, output_dir, iqa_differences=None):
         f.write(f"Moyenne des charges positives: {stats['mean_positive_red']:.4f} (sur {stats['count_positive_red']} atomes)\n")
         f.write(f"Écart-type: {stats['std_red']:.4f}\n")
         f.write(f"Somme totale: {stats['sum_red']:.4f} (attendu: -1 e)\n")
+        f.write("\nTop 3 atomes contribuant le plus à la réduction:\n")
+        for i, atom in enumerate(stats['top3_impact_red'], 1):
+            f.write(f"{i}. {atom}\n")
 
-        # NOUVELLE SECTION IQA
-        if iqa_differences:
-            f.write("\n" + "="*60 + "\n")
-            f.write("STATISTIQUES IQA ADDITIVES\n")
-            f.write("="*60 + "\n\n")
+        f.write("\nSTATISTIQUES COMPARATIVES\n")
+        f.write("-"*30 + "\n")
+        f.write(f"Corrélation entre profils d'oxydation et de réduction: {stats['correlation_ox_red']:.4f}\n")
 
-            # Énergies totales
-            f.write("ÉNERGIES TOTALES ADDITIVES\n")
-            f.write("-"*30 + "\n")
-            f.write(f"État neutre:    {iqa_differences['neutral_total']:12.6f} hartree\n")
-            f.write(f"État oxydé:     {iqa_differences['oxidized_total']:12.6f} hartree\n")
-            f.write(f"État réduit:    {iqa_differences['reduced_total']:12.6f} hartree\n\n")
-
-            f.write(f"Δ(oxydation):   {iqa_differences['total_delta_ox']:12.6f} hartree\n")
-            f.write(f"Δ(réduction):   {iqa_differences['total_delta_red']:12.6f} hartree\n\n")
-
-            # Contributions atomiques
-            f.write("CONTRIBUTIONS ATOMIQUES IQA\n")
-            f.write("-"*50 + "\n")
-            f.write(f"{'Atome':>6} {'Δ(IQA) Ox-Neu':>15} {'Δ(IQA) Red-Neu':>15}\n")
-            f.write("-"*50 + "\n")
-
-            # Trier par valeur absolue de changement d'oxydation
-            atomic_deltas = iqa_differences['atomic_deltas']
-
-            for atom_idx, data in atomic_deltas.items():
-                f.write(f"{data['label']:>6} {data['delta_ox']:15.6f} {data['delta_red']:15.6f}\n")
-
-            # Statistiques par type d'atome
-            f.write(f"\nSTATISTIQUES PAR TYPE D'ATOME\n")
-            f.write("-"*60 + "\n")
-            f.write(f"{'Type':>4} {'Nb':>3} {'Δ_Ox_Moy':>12} {'Δ_Red_Moy':>12} {'Δ_Ox_Max':>12} {'Δ_Red_Max':>12}\n")
-            f.write("-"*60 + "\n")
-
-            # Calculer statistiques par type d'atome
-            atom_types = {}
-            for atom_idx, data in atomic_deltas.items():
-                symbol = data['symbol']
-                if symbol not in atom_types:
-                    atom_types[symbol] = {'ox': [], 'red': []}
-                atom_types[symbol]['ox'].append(data['delta_ox'])
-                atom_types[symbol]['red'].append(data['delta_red'])
-
-            for symbol in sorted(atom_types.keys()):
-                ox_values = atom_types[symbol]['ox']
-                red_values = atom_types[symbol]['red']
-
-                count = len(ox_values)
-                ox_mean = sum(ox_values) / count
-                red_mean = sum(red_values) / count
-                ox_max = max(ox_values, key=abs)
-                red_max = max(red_values, key=abs)
-
-                f.write(f"{symbol:>4} {count:>3} {ox_mean:12.6f} {red_mean:12.6f} {ox_max:12.6f} {red_max:12.6f}\n")
-
-    print(f"Statistiques complètes (charges + IQA) sauvegardées: {stats_file}")
+    print(f"Statistiques des différences de charges sauvegardées dans {stats_file}")
 
     # Mettre à jour le DataFrame avec les données d'impact
     df.to_csv(os.path.join(output_dir, f'{conf_name}_charge_differences.csv'), index=False)

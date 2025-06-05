@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from scm.plams import *
 from scm.conformers import ConformersJob
 from scm.plams.core.settings import Settings
-
+print(os.cpu_count())
 # Constantes globales
 TEMPERATURE = 298
 R = 8.314
@@ -189,7 +189,6 @@ def generate_conformers(molecule, calc_dir):
     s.input.ams.Generator.Method = "RDKit"
     s.input.ams.Generator.RDKit.InitialNConformers = 1000
     s.input.ForceField.Type = "UFF"
-    s.runscript.nproc = os.cpu_count()
     
     job_dir = os.path.join(calc_dir, "generate_conformers")
     os.makedirs(job_dir, exist_ok=True)
@@ -213,7 +212,6 @@ def optimize_conformers(previous_job, calc_dir, e_window=10):
     s.input.ams.InputMaxEnergy = e_window
     s.input.dftb.Model = "DFTB3"
     s.input.dftb.ResourcesDir = "DFTB.org/3ob-3-1"
-    s.runscript.nproc = os.cpu_count()
     
     job_dir = os.path.join(calc_dir, "optimize_conformers")
     os.makedirs(job_dir, exist_ok=True)
@@ -235,8 +233,7 @@ def score_conformers(previous_job, calc_dir, functional="PBE0", basis="TZP", e_w
     rkf_path = os.path.abspath(previous_job.results.rkfpath())
     s.input.ams.InputConformersSet = rkf_path
     s.input.ams.InputMaxEnergy = e_window
-    s.runscript.nproc = os.cpu_count()
-
+    
     if dispersion != "None":
         if dispersion == "GRIMME3 BJDAMP":
             s.input.adf.XC.DISPERSION = "GRIMME3"
@@ -272,7 +269,6 @@ def filter_conformers(previous_job, calc_dir, e_window=2, rmsd_threshold=1.0):
     s.input.ams.InputConformersSet = rkf_path
     s.input.ams.InputMaxEnergy = e_window
     s.input.ams.Equivalence.CREST.RMSDThreshold = rmsd_threshold
-    s.runscript.nproc = os.cpu_count()
     
     job_dir = os.path.join(calc_dir, "filter_conformers")
     os.makedirs(job_dir, exist_ok=True)
