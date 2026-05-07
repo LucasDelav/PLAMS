@@ -72,3 +72,5 @@ generate_2d_figures.py
 rkf_viewer.py
 fetch_missing.sh
 sync_conformers_to_criann.sh
+docs/plot_capacity_vs_redox.py
+docs/capacity_vs_redox.png

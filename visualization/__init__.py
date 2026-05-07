@@ -1,5 +1,5 @@
 """
-Module de visualisation pour PlamsV4.
+Module de visualisation pour PlamsV5.
 
 Ce module fournit des outils pour générer des graphiques de corrélation
 entre les propriétés moléculaires calculées par les différents pipelines.
