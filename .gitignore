@@ -66,3 +66,9 @@ Thumbs.db
 
 # Claude Code session state
 .claude/
+
+# Personal/local helper scripts (kept locally, not in repo)
+generate_2d_figures.py
+rkf_viewer.py
+fetch_missing.sh
+sync_conformers_to_criann.sh

@@ -1,9 +1,21 @@
-# Debug
-#CCO EtOH
-#c1ccccc1 Benz
-#C1(=O)C(=O)C=CC=C1 O2-Benz
-#c1(c(cccc1)O)O H2O-Benz
-#c1(c(ccc(c1)C)O)O H2O-BenzMe
+# =============================================================================
+# input.txt — Catalogue des molécules pour le criblage PlamsV5
+# =============================================================================
+# Format : <SMILES> <NAME>
+# Une molécule par ligne. Lignes commençant par '#' ignorées (commentaires).
+# Les sections RÉSERVES en fin de fichier sont des candidats non actifs ;
+# décommenter pour les inclure dans le criblage.
+# =============================================================================
+
+
+# =============================================================================
+# SECTION 1 — Set principal : catéchols et quinones substitués
+# =============================================================================
+# 38 molécules sur 4 squelettes (19 catéchols + 19 quinones correspondantes).
+#   - HMC/HMQ : hydroxyméthyl-catéchol/quinone et halogénés (F, Cl, Br, I)
+#   - DA/DOPA : aminoéthyl-catéchol/quinone et halogénés
+#   - CA/CQ   : caféate / aldéhyde / alcool / vinyl-éthényle
+#   - DHI/IQ  : dihydroxy-indole/quinone et hétéroatomes (NH, O, S, P)
 
 # Catéchols
 c1(c(ccc(c1)CO)O)O HMC
@@ -47,7 +59,13 @@ C1(=O)C(=O)C=c2c(=C1)cco2 O-IQ
 C1(=O)C(=O)C=c2c(=C1)ccs2 S-IQ
 C1(=O)C(=O)C=c2c(=C1)cc[pH]2 P-IQ
 
-#Catéchols, lignine-derived, phénylpropanoïdes
+
+# =============================================================================
+# SECTION 2 — Catéchols lignine-derived et phénylpropanoïdes
+# =============================================================================
+# 36 molécules : motifs naturels issus de la lignine ou phénylpropanoïdes.
+#   CATECHOL, alkyl-catéchols, gaïacol, vanilline, syringol, férulique, etc.
+
 Oc1ccccc1O CATECHOL
 Cc1ccc(O)c(O)c1 4-METHYLCATECHOL
 CCc1ccc(O)c(O)c1 4-ETHYLCATECHOL
@@ -83,3 +101,167 @@ C=CCc1cc(OC)c(O)cc1 EUGENOL
 COc1cc(/C=C/C)c(O)cc1 ISOEUGENOL
 Oc1ccc2OCOc2c1 SESAMOL
 CC(Cc1ccc(O)c(O)c1)C(C)Cc2ccc(O)c(O)c2 NDGA
+
+
+# =============================================================================
+# SECTION 3 — Set Buchard (collaboration York, greffage polymère)
+# =============================================================================
+# 16 molécules (Mol_1 à Mol_8, formes red/ox).
+# Structures conçues pour copolymérisation avec sites greffables (-OH primaire,
+# motifs furo/pyrano, esters caféiques, trihydroxylé en Mol_6).
+
+OC1OCCC1OCc2ccc(O)c(O)c2 Mol_1_red
+OC1OCCC1OCC2=CC(=O)C(=O)C=C2 Mol_1_ox
+Oc1ccc(CSC2=NC3OCCC3O2)cc1O Mol_2_red
+O=C1C=CC(=CC1=O)CSC2=NC3OCCC3O2 Mol_2_ox
+OCc1cc(O)c(O)cc1C2=NC3OCCC3O2 Mol_3_red
+OCC1=CC(=O)C(=O)C=C1C2=NC3OCCC3O2 Mol_3_ox
+NCCc1cc(O)c(O)cc1C2=NC3OCCC3O2 Mol_4_red
+NCCC1=CC(=O)C(=O)C=C1C2=NC3OCCC3O2 Mol_4_ox
+OC1OCCC1OC(=O)\C=C\c2ccc(O)c(O)c2 Mol_5_red
+OC1OCCC1OC(=O)\C=C\C2=CC(=O)C(=O)C=C2 Mol_5_ox
+OC1OCCC1OC(=O)c2cc(O)c(O)c(O)c2 Mol_6_red
+OC1OCCC1OC(=O)C2=CC(=O)C(=O)C(=C2)O Mol_6_ox
+Oc1ccc(/C=C/C2OC3CCOC3O2)cc1O Mol_7_red
+O=C1C=CC(=CC1=O)/C=C/C2OC3CCOC3O2 Mol_7_ox
+Oc1ccc(cc1O)C2OC3CCOC3O2 Mol_8_red
+O=C1C=CC(=CC1=O)C2OC3CCOC3O2 Mol_8_ox
+
+
+# =============================================================================
+# SECTION 4 — Acide gallique (3,4,5-trihydroxybenzoïque) et quinone
+# =============================================================================
+# Candidat trihydroxylé évalué pour greffage Buchard via estérification
+# COOH ↔ OH polymère. Pyrogallol + COOH, M=170.12 (catéchol) / 168.10 (quinone).
+# Couple à 2 électrons, OH résiduel en position 5 de la quinone.
+
+O=C(O)c1cc(O)c(O)c(O)c1 GALLIC_ACID
+O=C(O)C1=CC(=O)C(=O)C(O)=C1 GALLIC_QUINONE
+
+
+# =============================================================================
+# RÉSERVES — Candidats non actifs (commentés)
+# =============================================================================
+# Décommenter une ligne pour inclure la molécule dans le criblage.
+
+## Catéchols biomimétiques, variantes HMC / dopamine / acide caféique
+#OCc1ccc(O)c(O)c1 HMC
+#OCc1cc(F)c(O)c(O)c1 F-HMC
+#OCc1cc(Cl)c(O)c(O)c1 CL-HMC
+#OCc1cc(Br)c(O)c(O)c1 BR-HMC
+#OCc1cc(I)c(O)c(O)c1 I-HMC
+#NCCc1cc(F)c(O)c(O)c1 F-DOPAMINE
+#NCCc1cc(Cl)c(O)c(O)c1 CL-DOPAMINE
+#NCCc1cc(Br)c(O)c(O)c1 BR-DOPAMINE
+#NCCc1cc(I)c(O)c(O)c1 I-DOPAMINE
+#O=C(O)/C=C/c1cc(O)c(O)cc1 CAFFEIC_ACID_ISOMER
+#O=CC=Cc1cc(O)c(O)cc1 CAFFEALDEHYDE_ISOMER
+#OC/C=C/c1cc(O)c(O)cc1 CAFFEYL_ALCOHOL_ISOMER
+
+## Pyrogallols, gallates, tanins hydrolysables, motifs polyphénoliques
+#Oc1cc(O)c(O)cc1 PYROGALLOL
+#COC(=O)c1cc(O)c(O)c(O)c1 METHYL_GALLATE
+#CCOC(=O)c1cc(O)c(O)c(O)c1 ETHYL_GALLATE
+#CCCOC(=O)c1cc(O)c(O)c(O)c1 PROPYL_GALLATE
+#CCCCOC(=O)c1cc(O)c(O)c(O)c1 BUTYL_GALLATE
+#CCCCCOC(=O)c1cc(O)c(O)c(O)c1 PENTYL_GALLATE
+#CCCCCCOC(=O)c1cc(O)c(O)c(O)c1 HEXYL_GALLATE
+#CCCCCCCOC(=O)c1cc(O)c(O)c(O)c1 HEPTYL_GALLATE
+#CCCCCCCCOC(=O)c1cc(O)c(O)c(O)c1 OCTYL_GALLATE
+#CCCCCCCCCCOC(=O)c1cc(O)c(O)c(O)c1 DECYL_GALLATE
+#O=Cc1cc(O)c(O)c(O)c1 GALLALDEHYDE
+#CC(=O)c1cc(O)c(O)c(O)c1 2,3,4-TRIHYDROXYACETOPHENONE
+#O=C(O)/C=C/c1cc(O)c(O)c(O)c1 3,4,5-TRIHYDROXYCINNAMIC_ACID
+#O=CC=Cc1cc(O)c(O)c(O)c1 3,4,5-TRIHYDROXYCINNAMALDEHYDE
+#OC/C=C/c1cc(O)c(O)c(O)c1 3,4,5-TRIHYDROXYCINNAMYL_ALCOHOL
+#COc1cc(O)c(O)c(OC)c1 DIMETHOXY_PYROGALLOL
+#O=C(O)c1c(O)cc(O)cc1O DIHYDROXY_GALLIC_ACID_ISOMER
+#COC(=O)c1c(O)cc(O)cc1O METHYL_DIHYDROXYBENZOATE
+#CCOC(=O)c1c(O)cc(O)cc1O ETHYL_DIHYDROXYBENZOATE
+#O=Cc1c(O)cc(O)cc1O DIHYDROXY_BENZALDEHYDE
+#CC(=O)c1c(O)cc(O)cc1O DIHYDROXY_HYDROXYACETOPHENONE
+#Nc1cc(O)c(O)c(O)c1 AMINOPYROGALLOL
+
+## Hydroquinones, résorcinols, dihydroxybenzènes simples
+#Oc1ccc(O)cc1 HYDROQUINONE
+#Oc1cccc(O)c1 RESORCINOL
+#Cc1cc(O)ccc1O 3-METHYLCATECHOL
+#Cc1c(O)cccc1O 4-METHYLCATECHOL_ISOMER
+#O=Cc1ccccc1O SALICYLALDEHYDE
+#O=C(O)c1ccccc1O SALICYLIC_ACID
+#CC(=O)c1ccccc1O HYDROXYACETOPHENONE
+#Nc1ccc(O)c(O)c1 AMINOCATECHOL
+
+## Benzoquinones et o-quinones simples
+#O=C1C=CC(=O)C=C1 1,4-BENZOQUINONE
+#CC1=CC(=O)C=CC1=O TOLUQUINONE
+#COC1=CC(=O)C=CC1=O 2-METHOXY-1,4-BENZOQUINONE
+#CC1=CC(=O)C(C)=CC1=O XYLOQUINONE
+#CC1=C(O)C(=O)C=CC1=O METHYL_HYDROXY_BENZOQUINONE
+#COC1=C(O)C(=O)C=CC1=O METHOXY_HYDROXY_BENZOQUINONE
+
+## Indoles, benzofuranes, benzothiophènes redox-related
+#c1cc2[nH]ccc2cc1O HYDROXYINDOLE
+#c1cc2[nH]ccc2c(O)c1O DIHYDROXYINDOLE_ISOMER
+#c1cc2occc2c(O)c1O DIHYDROXYBENZOFURAN
+#c1cc2sccc2c(O)c1O DIHYDROXYBENZOTHIOPHENE
+#O=C1C=CC(=O)c2[nH]ccc12 INDOLE_1,4_QUINONE
+#O=C1C=CC(=O)c2occc12 BENZOFURAN_QUINONE
+#O=C1C=CC(=O)c2sccc12 BENZOTHIOPHENE_QUINONE
+
+## Naphtoquinones naturelles et bio-inspired
+#O=C1C=CC(=O)c2ccccc12 1,4-NAPHTHOQUINONE
+#O=C1C=CC(=O)c2ccccc2C1=O 1,2-NAPHTHOQUINONE
+#Oc1ccc2C(=O)C=CC(=O)c2c1 LAWSONE
+#Oc1cccc2C(=O)C=CC(=O)c12 JUGLONE
+#Cc1ccc(O)c2C(=O)C=CC(=O)c12 PLUMBAGIN
+#CC1=CC(=O)c2ccccc2C1=O MENADIONE
+#O=C1C=CC(=O)c2cc(O)c(O)cc12 DIHYDROXY_NAPHTHOQUINONE
+#O=C1C(O)=CC(=O)c2cc(O)ccc12 HYDROXY_LAWSONE_ISOMER
+#CC1=CC(=O)c2cc(O)c(O)cc2C1=O METHYL_DIHYDROXY_NAPHTHOQUINONE
+#COC1=CC(=O)c2cc(O)c(O)cc2C1=O METHOXY_DIHYDROXY_NAPHTHOQUINONE
+#O=C1C=CC(=O)c2cc(CO)ccc12 HYDROXYMETHYL_NAPHTHOQUINONE
+#O=C1C=CC(=O)c2cc(CCN)ccc12 AMINOETHYL_NAPHTHOQUINONE
+#O=C1C=CC(=O)c2cc(C(=O)O)ccc12 CARBOXY_NAPHTHOQUINONE
+#O=C1C=CC(=O)c2cc(C=O)ccc12 FORMYL_NAPHTHOQUINONE
+#CC1=C(O)C(=O)c2cc(O)ccc2C1=O METHYL_JUGLONE_ISOMER
+#O=C1C2=CC=CC=C2C(=O)C=C1O HYDROXY_1,2_NAPHTHOQUINONE
+#O=C1C2=CC(O)=CC=C2C(=O)C=C1O DIHYDROXY_1,2_NAPHTHOQUINONE
+
+## Anthraquinones
+#O=C1c2ccccc2C(=O)c2ccccc21 ANTHRAQUINONE
+#O=C1c2ccccc2C(=O)c2c1cc(O)c(O)c2 ALIZARIN
+#Cc1cc(O)c2C(=O)c3c(O)cccc3C(=O)c2c1 CHRYSOPHANOL
+#OCc1cc(O)c2C(=O)c3c(O)cccc3C(=O)c2c1 ALOE_EMODIN
+#O=C(O)c1cc(O)c2C(=O)c3c(O)cccc3C(=O)c2c1 RHEIN
+#COc1cc(O)c2C(=O)c3c(O)c(C)ccc3C(=O)c2c1 PHYSCION
+#Cc1c(O)cc2C(=O)c3cc(O)ccc3C(=O)c2c1 EMODIN
+#Oc1cc2C(=O)c3ccccc3C(=O)c2cc1O QUINIZARIN
+
+## Plastoquinones, ubiquinones simplifiées
+#O=C1C(OC)=C(OC)C(=O)C(C)=C1C DIMETHOXY_METHYL_BENZOQUINONE
+#O=C1C(OC)=C(OC)C(=O)C(C)=C1CC=C(C)C PRENYL_DIMETHOXY_BENZOQUINONE
+#O=C1C(OC)=C(OC)C(=O)C(C)=C1C/C=C(\C)CCC=C(C)C PLASTOQUINONE_MODEL
+#O=C1C(OC)=C(OC)C(=O)C(C)=C1CCC=C(C)C SHORT_PRENYL_QUINONE
+#O=C1C(OC)=C(OC)C(=O)C(C)=C1CC=C(C)C UBIQUINONE_MODEL
+
+## Dimères, polyphénols étendus
+#Oc1ccc(cc1)-c1ccc(O)cc1 BIPHENOL_4_4
+#Oc1ccccc1-c1ccccc1O BIPHENOL_2_2
+#Oc1ccc(cc1O)-c1ccc(O)cc1O TETRAHYDROXY_BIPHENYL
+#COc1cc(ccc1O)-c1ccc(O)c(OC)c1 DIMETHOXY_BIPHENOL
+#CC(Cc1ccc(O)c(O)c1)Cc1ccc(O)c(O)c1 BIS_CATECHOL_SHORT
+#O=C(O)/C=C/c1ccc(O)cc1-c1ccc(O)cc1 BIPHENYL_CINNAMIC_ACID
+
+## Divers phénoliques redox-actifs additionnels
+#Oc1cccc(c1)O BENZENE_1_2_DIOL_ALT
+#COc1ccc(O)cc1 ANISOLE_PHENOL
+#CC(=O)c1ccc(O)cc1 HYDROXYACETOPHENONE_PARA
+#O=Cc1ccc(O)cc1 HYDROXYBENZALDEHYDE_PARA
+#O=C(O)c1ccc(O)cc1 HYDROXYBENZOIC_ACID_PARA
+#CC(=O)c1cc(O)ccc1O DIHYDROXYACETOPHENONE_ISOMER
+#O=Cc1cc(O)ccc1O DIHYDROXYBENZALDEHYDE_ISOMER
+#O=C(O)c1cc(O)ccc1O DIHYDROXYBENZOIC_ACID_ISOMER
+#CC(=O)c1ccc(O)c(OC)c1 APOCYNIN
+#Nc1ccc(O)cc1 AMINOPHENOL
+#Nc1cc(O)ccc1O DIHYDROXY_ANILINE
