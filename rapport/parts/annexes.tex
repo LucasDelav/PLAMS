@@ -1,0 +1,208 @@
+%=============================================================================
+\appendix
+
+\section{Descripteurs de Fukui testés pour la correction de $E_{\text{relax}}$}
+\label{app:fukui}
+
+Le tableau~\ref{tab:fukui_exhaustive} récapitule l'ensemble des descripteurs de Fukui et de CDFT testés en corrélation avec le résidu $E_{\text{relax}} - E_{\text{relax}}^{\text{LVC2}}$. Pour chaque descripteur, la corrélation est évaluée séparément pour la réduction (descripteur $f^+$ ou dual) et l'oxydation (descripteur $f^-$ ou dual). Les descripteurs sont regroupés par catégorie. Seuls les descripteurs intégrés sur les oxygènes atteignent la significativité ($p < 0.05$) en réduction ; aucun descripteur n'est significatif en oxydation.
+
+\begin{table}[H]
+\centering
+\caption{Corrélations entre les descripteurs de Fukui/CDFT et le résidu LVC2 ($n = 13$ molécules). Les valeurs significatives ($p < 0.05$) sont indiquées en gras.}
+\label{tab:fukui_exhaustive}
+\footnotesize
+\begin{tabular}{llrrrr}
+\toprule
+ & & \multicolumn{2}{c}{Réduction} & \multicolumn{2}{c}{Oxydation} \\
+\cmidrule(lr){3-4} \cmidrule(lr){5-6}
+Catégorie & Descripteur & $r$ & $p$ & $r$ & $p$ \\
+\midrule
+\multirow{3}{*}{Intégrés sur O}
+& $f^{\pm}_{\text{sumO}}$ & $\mathbf{-0.67}$ & $\mathbf{0.012}$ & $-0.16$ & $0.59$ \\
+& $\Delta f_{\text{sumO}}$ & $\mathbf{-0.69}$ & $\mathbf{0.009}$ & $-0.35$ & $0.24$ \\
+& $f^0_{\text{sumO}}$ & $\mathbf{-0.67}$ & $\mathbf{0.012}$ & $-0.16$ & $0.59$ \\
+\midrule
+\multirow{2}{*}{Intégrés sur C}
+& $f^{\pm}_{\text{sumC}}$ & $+0.54$ & $0.058$ & $+0.07$ & $0.82$ \\
+& $\Delta f_{\text{sumC}}$ & $+0.54$ & $0.058$ & $+0.36$ & $0.22$ \\
+\midrule
+\multirow{2}{*}{Intégrés sur H}
+& $f^{\pm}_{\text{sumH}}$ & $+0.04$ & $0.88$ & $-0.36$ & $0.23$ \\
+& $\Delta f_{\text{sumH}}$ & $+0.04$ & $0.88$ & $-0.36$ & $0.23$ \\
+\midrule
+\multirow{2}{*}{Atomiques (O)}
+& $\max_A f^{\pm}_A$ (O) & $-0.34$ & $0.25$ & $-0.16$ & $0.60$ \\
+& $\Delta f_{\max}$ / $\Delta f_{\min}$ & $-0.34$ & $0.25$ & $+0.39$ & $0.19$ \\
+\midrule
+\multirow{3}{*}{Top-$k$ atomiques}
+& Top-2 $\Delta f$ & $-0.41$ & $0.16$ & $+0.38$ & $0.20$ \\
+& Top-3 $\Delta f$ & $-0.38$ & $0.20$ & $+0.41$ & $0.17$ \\
+& Top-5 $\Delta f$ & $-0.31$ & $0.30$ & $+0.35$ & $0.24$ \\
+\midrule
+\multirow{3}{*}{CDFT globaux}
+& $\mu$ (pot. chimique) & $-0.14$ & $0.66$ & $-0.25$ & $0.40$ \\
+& $\eta$ (dureté) & $-0.30$ & $0.32$ & $-0.44$ & $0.13$ \\
+& $\omega$ (électrophilicité) & $+0.20$ & $0.52$ & --- & --- \\
+\midrule
+Référence & $f_{\text{O}}^{\text{LUMO}}$ ($n = 15$) & $\mathbf{-0.68}$ & $\mathbf{0.005}$ & $-0.49$ & $0.061$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Exemples de Fichiers d'Entrée AMS}
+%=============================================================================
+
+Les exemples suivants illustrent les fichiers d'entrée générés par PLAMS pour chaque pipeline.
+
+\subsection{DFT Optimisation + Fréquences (Pipeline Conformères, étape 4)}
+
+\begin{lstlisting}
+Task GeometryOptimization
+
+System
+  Atoms
+    C   0.000  0.000  0.000
+    ...
+  End
+  Charge 0
+End
+
+Properties
+  NormalModes Yes
+End
+
+Engine ADF
+  Basis
+    Type DZP
+    Core None
+  End
+  Relativity
+    Level None
+  End
+  NumericalQuality Good
+  XC
+    Hybrid PBE0
+  End
+  Solvation
+    Surf Delley
+    Solv name=Acetonitrile
+    Charged method=CONJ
+    C-Mat POT
+    SCF VAR ALL
+  End
+EndEngine
+\end{lstlisting}
+
+\subsection{Optimisation Géométrique DZP (Pipeline Redox)}
+
+Cet exemple montre l'optimisation géométrique DZP utilisée pour les états chargés (reduced\_opt, oxidized\_opt). Le neutre n'est pas re-optimisé (réutilisation du RKF conformères) :
+
+\begin{lstlisting}
+Task GeometryOptimization
+
+System
+  Atoms
+    ...
+  End
+  Charge -1       ! -1 (reduit) ou +1 (oxyde)
+End
+
+Properties
+  NormalModes Yes
+End
+
+Engine ADF
+  Basis
+    Type DZP
+    Core None
+  End
+  Relativity
+    Level None
+  End
+  Unrestricted Yes
+  SpinPolarization 1
+  XC
+    Hybrid PBE0
+  End
+  Solvation
+    Surf Delley
+    Solv name=Acetonitrile
+    Charged method=CONJ CORR  ! CORR pour les ions
+    C-Mat POT
+    SCF VAR ALL
+  End
+EndEngine
+\end{lstlisting}
+
+\subsection{Single-Point TZ2P (Pipeline Redox)}
+
+Les single-points TZ2P sont calculés pour le raffinement énergétique du schéma composite. Pas de modes normaux :
+
+\begin{lstlisting}
+Task SinglePoint
+
+System
+  Atoms
+    ...  ! Geometrie neutre ou ionique optimisee
+  End
+  Charge -1  ! 0 (neutral_tz2p), -1 (reduced_sp/tz2p), +1 (oxidized_sp/tz2p)
+End
+
+Engine ADF
+  Basis
+    Type TZ2P
+    Core None
+  End
+  Relativity
+    Level None
+  End
+  Unrestricted Yes   ! No pour neutral_tz2p
+  SpinPolarization 1 ! 0 pour neutral_tz2p
+  XC
+    Hybrid PBE0
+  End
+  Solvation
+    Surf Delley
+    Solv name=Acetonitrile
+    Charged method=CONJ CORR  ! CONJ pour neutral_tz2p
+    C-Mat POT
+    SCF VAR ALL
+  End
+EndEngine
+\end{lstlisting}
+
+\subsection{Analyse QTAIM/IQA}
+
+\begin{lstlisting}
+Task SinglePoint
+
+System
+  Atoms
+    ...
+  End
+  Charge 0  ! 0, -1 ou +1 selon l'etat analyse
+End
+
+Engine ADF
+  Basis
+    Type TZP
+    Core None
+  End
+  Relativity
+    Level None
+  End
+  NumericalQuality Good
+  XC
+    Hybrid PBE0
+  End
+  QTAIM
+    Enabled Yes
+    AnalysisLevel Full
+    Source Yes
+  End
+  IQA
+    Enabled Yes
+  End
+EndEngine
+\end{lstlisting}
+

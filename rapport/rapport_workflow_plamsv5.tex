@@ -1,0 +1,54 @@
+\documentclass[11pt, a4paper]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{siunitx}
+\usepackage{multirow}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\usepackage{wrapfig}
+
+\geometry{margin=2.5cm}
+\graphicspath{{figures/}{figures/thermodynamic_models/}{figures/politzer/}{figures/section4/}{figures/section5/}{figures/section51/}}
+
+% Configuration des listings pour le code
+\lstset{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    columns=flexible
+}
+
+% --- Titre et Auteur ---
+\title{\textbf{Rapport d'avancement : Développement d'un Workflow Automatisé pour la Prédiction des Propriétés Redox de Molécules Organiques par DFT}}
+\author{Lucas Delavoye \\ \small Master XL-Chem V (2024/2026) \\ \small Laboratoire CARMeN (UMR CNRS 6064)}
+\date{Mars 2026}
+
+\begin{document}
+
+\maketitle
+
+\input{parts/01_introduction}
+\input{parts/02_workflow}
+\input{parts/03_modeles_predictifs}
+\input{parts/04_correction_solvant}
+\input{parts/05_apprentissage}
+\input{parts/06_conclusion}
+\input{parts/annexes}
+\input{parts/bibliography}
+
+\end{document}

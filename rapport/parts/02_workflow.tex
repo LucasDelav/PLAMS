@@ -1,0 +1,199 @@
+%=============================================================================
+\section{Description du Workflow}
+%=============================================================================
+
+\subsection{Vue d'ensemble}
+
+Le workflow prend en entrée une liste de molécules définies par leur code SMILES. Les molécules étudiées appartiennent à deux familles formant un couple redox : les \textbf{catéchols} (forme réduite) et les \textbf{quinones} (forme oxydée). Pour la recherche de corrélations, les analyses sont menées sur une seule famille à la fois afin d'éviter un biais : si les deux familles étaient mélangées, les coefficients de corrélation seraient artificiellement élevés en raison de la formation de deux clusters de points bien séparés.
+
+Les calculs présentés dans ce rapport portent sur 19 dérivés de catéchols et 19 quinones (38 molécules au total), incluant des substituants variés (halogènes F, Cl, Br, I ; chaînes hydroxymethyle, dopamine, L-DOPA, acide caféique ; hétérocycles N, O, S). Pour chaque molécule, l'ensemble des calculs est orchestré de manière séquentielle à travers quatre pipelines successifs : génération de conformères, calculs redox, analyse topologique QTAIM/IQA, et analyse des corrélations. L'ensemble des calculs a été réalisé avec l'Amsterdam Modeling Suite (AMS 2025).
+
+La figure~\ref{fig:workflow} illustre l'enchaînement des quatre pipelines et les données propagées entre eux.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    node distance=1.8cm and 1.6cm,
+    block/.style={rectangle, draw, fill=blue!8, text width=2.4cm, text centered, rounded corners=4pt, minimum height=1.1cm, font=\small},
+    arrow/.style={-{Stealth[length=2.5mm]}, thick},
+    data/.style={font=\scriptsize\itshape, text=gray!60!black, align=center}
+]
+
+\node[block] (smiles) {\textbf{Entrée}\\SMILES};
+\node[block, right=of smiles] (conf) {\textbf{1. Conformères}\\RDKit + DFT};
+\node[block, right=of conf] (redox) {\textbf{2. Redox}\\7 calculs/conf.};
+\node[block, right=of redox] (qtaim) {\textbf{3. QTAIM/IQA}\\Topologie};
+\node[block, below=1.8cm of redox] (analysis) {\textbf{4. Analyse}\\Corrélations\\LVC};
+
+\draw[arrow] (smiles) -- (conf);
+\draw[arrow] (conf) -- (redox) node[midway, above, data] {géométries} node[midway, below, data] {poids Boltzmann};
+\draw[arrow] (redox) -- (qtaim) node[midway, above, data] {géométries};
+\draw[arrow] (conf) |- (analysis) node[pos=0.75, left, data] {fréquences};
+\draw[arrow] (redox) -- (analysis) node[midway, right, data] {$E_{\text{relax}}$};
+\draw[arrow] (qtaim) |- (analysis) node[pos=0.75, right, data] {charges, IQA};
+
+\end{tikzpicture}%
+}
+\caption{Schéma du workflow. Les données (géométries optimisées, poids de Boltzmann, fréquences vibrationnelles) sont propagées entre les pipelines via les répertoires de travail partagés.}
+\label{fig:workflow}
+\end{figure}
+
+L'exécution typique suit la séquence suivante :
+
+\begin{lstlisting}
+./conformers_gen.py --name molecule --smiles "SMILES" \
+                    --functional PBE0 --basis DZP \
+                    --solvent Acetonitrile
+
+./redox_calc.py --input-dir ./molecule_workdir/conformers/results \
+                --name molecule --functional PBE0 --basis DZP \
+                --refinement-basis TZ2P --solvent Acetonitrile
+
+./qtaim_calc.py --name molecule --functional PBE0 --basis TZP
+\end{lstlisting}
+
+\subsection{Pipeline Conformères}
+
+Le premier pipeline transforme un code SMILES en un ensemble restreint de conformères optimisés. Le processus se déroule en quatre étapes séquentielles :
+
+\begin{enumerate}[noitemsep]
+    \item \textbf{Generate} : Génération de 1000 conformères initiaux via RDKit avec champ de force UFF
+    \item \textbf{Optimize} : Pré-optimisation géométrique par GFN1-xTB (sans fenêtre d'énergie)
+    \item \textbf{Boltzmann xTB} : Sélection des conformères par poids de Boltzmann ($w \geq 0.05$) sur les énergies GFN1-xTB
+    \item \textbf{DFT opt + freq + solvant} : Optimisation géométrique PBE0/DZP avec modes normaux et solvatation COSMO, suivie d'un filtrage Boltzmann DFT ($w \geq 0.10$) sur les énergies libres de Gibbs
+\end{enumerate}
+
+L'étape~4 garantit que seuls les vrais minima (absence de fréquences imaginaires) sont transmis aux pipelines suivants. Les fichiers RKF des conformères validés sont référencés dans \texttt{neutral\_rkf\_paths.json}, qui sert de pont vers le pipeline redox. Les paramètres (fonctionnelle, base, solvant, seuils de Boltzmann) sont configurables via les arguments en ligne de commande.
+
+\begin{table}[htbp]
+\centering
+\caption{Paramètres du pipeline conformères.}
+\label{tab:params_conf}
+\begin{tabular}{ll}
+\toprule
+\textbf{Paramètre} & \textbf{Valeur} \\
+\midrule
+\multicolumn{2}{l}{\textit{Moteurs de calcul}} \\
+Generate & RDKit + UFF (1000 conformères initiaux) \\
+Optimize & GFN1-xTB \\
+DFT opt + freq + solvant & ADF (PBE0/DZP + COSMO) \\
+\midrule
+\multicolumn{2}{l}{\textit{Paramètres DFT (étape 4)}} \\
+Fonctionnelle & PBE0 (hybride, 25\% HF) \\
+Base & DZP (Slater double zeta + polarisation) \\
+Solvatation & COSMO (acétonitrile) \\
+Relativité & Aucune \\
+Qualité numérique & Good \\
+\midrule
+\multicolumn{2}{l}{\textit{Filtrage des conformères}} \\
+Seuil Boltzmann après xTB & 5\% \\
+Seuil Boltzmann après DFT & 10\% \\
+Seuil de fréquence imaginaire & \SI{0.0}{cm^{-1}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Pipeline Redox}
+
+Le pipeline redox utilise un schéma d'énergie composite TZ2P+DZP : les optimisations géométriques et les corrections thermodynamiques sont réalisées en base DZP, tandis que les énergies électroniques de référence sont obtenues par single-points en base TZ2P. Le neutre n'est pas re-optimisé : le fichier RKF de l'étape~4 du pipeline conformères est directement réutilisé. Pour chaque conformère, sept calculs DFT supplémentaires sont effectués :
+
+\begin{enumerate}[noitemsep]
+    \item \textbf{neutral\_tz2p} : Single-point TZ2P sur la géométrie neutre optimisée (charge 0)
+    \item \textbf{reduced\_sp} : Single-point TZ2P sur la géométrie neutre (charge $-1$, EA verticale)
+    \item \textbf{reduced\_opt} : GeomOpt DZP + fréquences + COSMO de l'état réduit (charge $-1$)
+    \item \textbf{reduced\_tz2p} : Single-point TZ2P sur la géométrie réduite optimisée
+    \item \textbf{oxidized\_sp} : Single-point TZ2P sur la géométrie neutre (charge $+1$, IP vertical)
+    \item \textbf{oxidized\_opt} : GeomOpt DZP + fréquences + COSMO de l'état oxydé (charge $+1$)
+    \item \textbf{oxidized\_tz2p} : Single-point TZ2P sur la géométrie oxydée optimisée
+\end{enumerate}
+
+Le potentiel redox est ensuite obtenu via l'équation de Nernst $E^\circ = -\Delta G^\circ / nF$, où $\Delta G^\circ$ utilise l'énergie libre composite $G_{\text{composite}} = E_e(\text{TZ2P}) + [G(\text{DZP}) - E_e(\text{DZP})]$, le terme entre crochets capturant les corrections thermodynamiques (ZPE, enthalpie, entropie) au niveau DZP. Ce schéma assure la cohérence des bases pour les énergies électroniques (toutes en TZ2P) tout en évitant le coût d'une optimisation géométrique en TZ2P.
+
+\begin{table}[htbp]
+\centering
+\caption{Paramètres du pipeline redox (schéma composite TZ2P+DZP).}
+\label{tab:params_redox}
+\begin{tabular}{ll}
+\toprule
+\textbf{Paramètre} & \textbf{Valeur} \\
+\midrule
+Fonctionnelle & PBE0 \\
+Base (optimisation) & DZP \\
+Base (raffinement SP) & TZ2P \\
+Relativité & Aucune \\
+Solvatation neutre & COSMO (CONJ) \\
+Solvatation ions & COSMO (CONJ CORR) \\
+Modes normaux & Oui (GeomOpt), Non (SinglePoint) \\
+\midrule
+\multicolumn{2}{l}{\textit{États de spin}} \\
+Neutre (charge 0) & Couche fermée \\
+Réduit (charge $-1$) & Couche ouverte, $S = 1/2$ \\
+Oxydé (charge $+1$) & Couche ouverte, $S = 1/2$ \\
+\midrule
+\multicolumn{2}{l}{\textit{Correction des fréquences imaginaires}} \\
+Tentatives max. & 3 \\
+Perturbation & \SI{0.1}{\angstrom} le long du mode imaginaire \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Correction des Fréquences Imaginaires}
+
+Lorsqu'une optimisation géométrique converge vers un point selle (présence de fréquences imaginaires), un algorithme de correction est appliqué :
+
+\begin{enumerate}[noitemsep]
+    \item Identification du mode vibrationnel imaginaire le plus négatif
+    \item Perturbation de la géométrie le long de ce mode (directions positive et négative)
+    \item Ré-optimisation à partir des géométries perturbées
+    \item Itération jusqu'à obtention d'un vrai minimum (maximum 3 tentatives)
+\end{enumerate}
+
+\subsection{Pipeline QTAIM/IQA}
+
+Ce pipeline exploite les fonctionnalités QTAIM (Quantum Theory of Atoms in Molecules) et IQA (Interacting Quantum Atoms) implémentées dans AMS. Les calculs sont lancés via PLAMS et les résultats (charges atomiques de Bader, énergies intra-atomiques $E_{\text{intra}}$, énergies d'interaction $E_{\text{inter}}$) sont extraits des fichiers RKF générés par AMS. La relativité ZORA est désactivée car incompatible avec l'analyse QTAIM dans AMS.
+
+L'analyse peut être effectuée sur plusieurs états de charge (neutre, réduit, oxydé) pour un même conformère, permettant de suivre l'évolution des propriétés topologiques lors du transfert d'électron.
+
+Un aspect important de l'analyse comparative concerne la numérotation des atomes. Lorsqu'on compare différentes molécules (par exemple des dérivés de quinone avec différents substituants), les indices atomiques attribués par le logiciel diffèrent d'un système à l'autre. Pour permettre une comparaison cohérente des propriétés atomiques (charges, énergies IQA) entre molécules apparentées, un algorithme de réindexation topologique a été implémenté. Cet algorithme identifie les atomes du cycle aromatique principal à partir du point critique de cycle QTAIM, puis assigne des indices canoniques (1 à 8 pour les carbones du cycle et les oxygènes) indépendamment de la numérotation initiale.
+
+\begin{table}[htbp]
+\centering
+\caption{Paramètres du pipeline QTAIM/IQA.}
+\label{tab:params_qtaim}
+\begin{tabular}{ll}
+\toprule
+\textbf{Paramètre} & \textbf{Valeur} \\
+\midrule
+Fonctionnelle & PBE0 (hybride, 25\% HF) \\
+Base & TZP (Slater triple zeta + polarisation) \\
+Relativité & Aucune (incompatible QTAIM) \\
+Qualité numérique & Good \\
+QTAIM & Activé (AnalysisLevel = Full) \\
+IQA & Activé \\
+\midrule
+\multicolumn{2}{l}{\textit{États de charge analysés}} \\
+Neutre & Couche fermée \\
+Réduit ($-1$) & Couche ouverte, $S = 1/2$ \\
+Oxydé ($+1$) & Couche ouverte, $S = 1/2$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Pipeline Analyse des Termes de $\Delta G$}
+
+Ce pipeline cherche à prédire les différents termes de la décomposition de $\Delta G$ (équations~\ref{eq:decomposition_red} et~\ref{eq:decomposition_ox}) à partir des seules propriétés de l'état neutre, sans réaliser les optimisations géométriques coûteuses des états chargés. Les quatre termes sont traités :
+
+\begin{itemize}[noitemsep]
+    \item \textbf{EA / IP} : prédiction par l'approximation de Koopmans ($\varepsilon_{\text{HOMO}}$, $\varepsilon_{\text{LUMO}}$) et par l'approche de Politzer ($\bar{I}_{S,\min}$, $V_{S,\min}$)
+    \item \textbf{$E_{\text{relax}}$} : prédiction par couplage vibronique (LVC, LVC2, Duschinsky, QVC, VPT2, Dual-Hessian)
+    \item \textbf{$\Delta\Delta U$} : modèle constant ou corrélation avec la ZPE de l'état neutre
+    \item \textbf{$T\Delta S$} : modèle constant ou corrélation avec l'entropie vibrationnelle RRHO
+\end{itemize}
+
+Le module \texttt{qmanalysis} implémente six méthodes de couplage vibronique et calcule 67 descripteurs moléculaires (fréquences, IR, flexibilité, propriétés électroniques). Les analyses de corrélation sont menées exclusivement sur les catéchols (forme réduite) afin d'éviter un biais statistique.
+
+\subsection{Transfert des Poids de Boltzmann}
+
+Un point méthodologique important concerne le transfert des poids de Boltzmann entre pipelines : les poids calculés lors de l'étape DFT opt+freq du pipeline conformères (étape~4, basés sur les énergies libres de Gibbs PBE0/DZP+COSMO) sont réutilisés dans le pipeline redox pour la moyenne pondérée des propriétés. Ce choix est préférable au calcul des poids à partir des énergies d'optimisation redox, car après optimisation, les conformères peuvent converger vers des géométries très proches, donnant des poids de Boltzmann artificiellement uniformes.
+

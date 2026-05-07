@@ -1,200 +1,134 @@
-# PLAMS - Outils pour l'analyse conformationnelle et les calculs redox
+# PLAMS V5 — Workflows automatisés pour la prédiction de propriétés redox par DFT
 
-Ce repository contient des scripts Python utilisant la bibliothèque PLAMS (Python Library for Automating Molecular Simulation) pour effectuer des calculs de chimie computationnelle avancés avec Amsterdam Modeling Suite (AMS).
+Système de workflows de chimie computationnelle pour le criblage haut-débit de matériaux redox-actifs organiques (couple catéchol/quinone), construit sur l'Amsterdam Modeling Suite (AMS) et la bibliothèque PLAMS. Le projet automatise la chaîne complète conformères → DFT → analyses, et explore des modèles prédictifs physiquement motivés pour réduire le coût computationnel du criblage.
 
-## Fonctionnalités
+## Pipelines
 
-- **conformers_gen.py** : Génère des conformères à partir d'une structure SMILES via un workflow en quatre étapes (génération, optimisation, scoring et filtrage)
-- **redox_calc.py** : Effectue des calculs redox sur les conformères générés (optimisation neutre, calcul du point simple réduit, optimisation réduite)
+Le système comporte quatre pipelines principaux, chacun pilotable depuis son script de tête :
+
+| Script | Pipeline | Description |
+|---|---|---|
+| `conformers_gen.py` | **qmconf** | Génération de conformères (RDKit) → optimisation GFN1-xTB → filtre Boltzmann → DFT opt+freq+solvant |
+| `redox_calc.py` | **qmredox** | Calculs redox composite TZ2P+DZP avec réutilisation du neutre, bases cohérentes |
+| `qtaim_calc.py` | **qmqtaim** | Analyse topologique QTAIM/IQA et décomposition énergétique |
+| `analysis/` | **qmanalysis** | Module d'analyse post-calcul (corrélations, modèles prédictifs, vibronique) |
+
+## Architecture du projet
+
+```
+PlamsV5/
+├── conformers_gen.py     # Pipeline conformères
+├── redox_calc.py         # Pipeline redox
+├── qtaim_calc.py         # Pipeline QTAIM
+├── common/               # Module partagé (constantes, frequency, workspace, …)
+├── qmconf/               # Logique pipeline conformères
+├── qmredox/              # Logique pipeline redox
+├── qmqtaim/              # Logique pipeline QTAIM
+├── qmanalysis/           # Module d'analyse fréquence-Edef
+├── visualization/        # Génération de figures
+├── analysis/             # Analyses post-calcul et modèles prédictifs
+├── slurm/                # Scripts SLURM pour cluster (CRIANN)
+├── docs/                 # Notes méthodologiques
+└── rapport/              # Rapport LaTeX (CARMeN), source dans rapport/parts/
+```
+
+## Caractéristiques clés (V5)
+
+- **Schéma composite TZ2P+DZP** pour les énergies redox : énergie électronique en TZ2P, corrections thermodynamiques en DZP, avec résiduel de décomposition systématiquement nul par construction
+- **Réutilisation du neutre optimisé** entre pipelines via `neutral_rkf_paths.json` (le neutre n'est pas recalculé dans le pipeline redox)
+- **GFN1-xTB** comme méthode semi-empirique pour l'optimisation des conformères (remplace DFTB)
+- **Filtre Boltzmann** sur les énergies libres DFT (seuil 0.10 par défaut)
+- **Mode `--predict-dg`** : protocole de criblage rapide en 3 SP+NormalModes au lieu de 7 calculs (gain ~5×)
+- **Cluster-continuum solvation** pour les solvants protiques (eau, méthanol) via molécules de solvant explicites + COSMO
 
 ## Prérequis
 
-- [Amsterdam Modeling Suite (AMS)](https://www.scm.com/amsterdam-modeling-suite/) 2021 ou plus récent
-- Python 3.7 ou plus récent
-- Module PLAMS (inclus dans l'installation d'AMS)
-- Module RDKit (pour la génération des conformères, inclus dans l'installation d'AMS)
+- [Amsterdam Modeling Suite](https://www.scm.com) (AMS) 2025 ou supérieur, avec moteur ADF
+- Python 3.10+ (utiliser `amspython` du SDK AMS)
+- Bibliothèques : PLAMS, RDKit (inclus dans AMS), NumPy, SciPy, Matplotlib (Pandas, Seaborn optionnels)
 
-## Installation et configuration
+Tous les scripts utilisent le shebang `#!/usr/bin/env amspython`.
 
-1. Installez Amsterdam Modeling Suite en suivant les instructions sur [le site web de SCM](https://www.scm.com/support/downloads/)
+## Installation
 
-2. Clonez ce repository :
-   ```bash
-   git clone https://github.com/LucasDelav/PLAMS.git
-   cd PLAMS
-   ```
-
-3. Rendez les scripts exécutables :
-   ```bash
-   chmod +x conformers_gen.py redox_calc.py calcul_thermo.py
-   ```
-
-## Utilisation des scripts
-
-### Générateur de conformères (conformers_gen.py)
-
-Ce script génère un ensemble de conformères pour une molécule donnée à partir de sa représentation SMILES, puis effectue une série d'optimisations et de filtrage pour obtenir les conformères les plus stables.
-
-**Workflow du script** :
-1. **Génération** : Utilise RDKit pour générer 1000 conformères initiaux
-2. **Optimisation** : Optimise la géométrie des conformères avec DFTB3
-3. **Scoring** : Calcule les énergies précises avec ADF (fonctionnelle PBE0, base TZP)
-4. **Filtrage** : Filtre les conformères redondants par RMSD
-5. **Frequency** : Effectue un calcul de fréquence et drop le conformers si au moins une est négative
-
-**Exemple d'utilisation** :
 ```bash
-$AMSBIN/amspython conformers_gen.py C1(=O)C(=O)C=CC(=C1)C[C@@H](C(=O)O)N L-DOPA
+git clone https://github.com/LucasDelav/PLAMS.git
+cd PLAMS
+source ~/ams2025.102/amsbashrc.sh    # adapter au chemin de votre install AMS
+chmod +x conformers_gen.py redox_calc.py qtaim_calc.py
 ```
 
-**Paramètres** :
-```
-positional arguments:
-  smiles                SMILES de la molecule
-  name                  Nom de la molecule (default: Molecule)
+## Exemples d'utilisation
 
-optional arguments:
-  -h, --help            show this help message and exit
-  --e-window-opt E_WINDOW_OPT
-                        Fenetre energetique (kJ/mol) pour l'etape d'optimisation (default: 10)
-  --functional {HF,VWN,XALPHA,Xonly,Stoll,PBE,RPBE,revPBE,PBEsol,BLYP,BP86,PW91,mPW,OLYP,OPBE,KT1,KT2,BEE,BJLDA,BJPBE,BJGGA,S12G,LB94,mPBE,B3LYPgauss,M06L,TPSS,revTPSS,MVS,SCAN,revSCAN,r2SCAN,tb-mBJ,B3LYP,B3LYP*,B1LYP,O3LYP,X3LYP,BHandH,BHandHLYP,B1PW91,MPW1PW,MPW1K,PBE0,OPBE0,TPSSh,M06,M06-2X,S12H,M08-HX,M08-SO,M11,TPSSH,PW6B95,MPW1B95,MPWB1K,PWB6K,M06-HF,BMK}
-                        Fonctionnelle pour le scoring (default: PBE0)
-  --basis {SZ,DZ,DZP,TZP,TZ2P,QZ4P}
-                        Base utilisee pour le scoring (default: TZP)
-  --e-window-score E_WINDOW_SCORE
-                        Fenetre energetique (kJ/mol) pour l'etape de scoring (default: 5)
-  --dispersion {None,GRIMME3,GRIMME4,UFF,GRIMME3 BJDAMP}
-                        Correction de dispersion pour le scoring (default: GRIMME3)
-  --e-window-filter E_WINDOW_FILTER
-                        Fenetre energetique (kJ/mol) pour l'etape de filtrage (default: 2)
-  --rmsd-threshold RMSD_THRESHOLD
-                        Seuil RMSD (A) pour considerer deux conformeres comme identiques (default: 1.0)
-  --freq-functional {HF,VWN,XALPHA,Xonly,Stoll,PBE,RPBE,revPBE,PBEsol,BLYP,BP86,PW91,mPW,OLYP,OPBE,KT1,KT2,BEE,BJLDA,BJPBE,BJGGA,S12G,LB94,mPBE,B3LYPgauss,M06L,TPSS,revTPSS,MVS,SCAN,revSCAN,r2SCAN,tb-mBJ,B3LYP,B3LYP*,B1LYP,O3LYP,X3LYP,BHandH,BHandHLYP,B1PW91,MPW1PW,MPW1K,PBE0,OPBE0,TPSSh,M06,M06-2X,S12H,M08-HX,M08-SO,M11,TPSSH,PW6B95,MPW1B95,MPWB1K,PWB6K,M06-HF,BMK}
-                        Fonctionnelle pour le calcul des frequences (par defaut: meme que scoring) (default: None)
-  --freq-basis {SZ,DZ,DZP,TZP,TZ2P}
-                        Base utilisee pour le calcul des frequences (default: DZ)
-```
+### 1. Génération de conformères (4 étapes)
 
-**Sortie** :
-- Fichiers XYZ des conformères générés dans un dossier `{name}_workdir/results/`
-- Informations sur les énergies relatives et les poids de Boltzmann
-
-### Calculateur redox (redox_calc.py)
-
-Ce script prend les conformères générés (fichiers XYZ) et réalise trois étapes de calcul pour étudier leurs propriétés à l'état réduit.
-
-**Workflow du script** :
-1. **Optimisation neutre** : Optimisation de géométrie de la molécule neutre
-2. **Calcul simple point réduit** : Calcul d'un point simple sur la molécule réduite (charge -1)
-3. **Optimisation réduite** : Optimisation de géométrie de la molécule réduite
-
-**Exemple d'utilisation** :
 ```bash
-$AMSBIN/amspython redox_calc.py L-DOPA_workdir/results/
+./conformers_gen.py --name catechol --smiles "OC1=CC=CC=C1O" \
+                    --functional PBE0 --basis DZP \
+                    --solvent Acetonitrile --boltzmann-min-weight 0.10
 ```
 
-**Paramètres** :
-```
-positional arguments:
-  input_dir             Dossier contenant les fichiers .xyz des conformères
+Sorties : `catechol_workdir/conformers/results/conf_*.xyz`, `conformers_summary.txt`, et `neutral_rkf_paths.json` (pont vers le pipeline redox).
 
-optional arguments:
-  -h, --help            show this help message and exit
-  --solvent SOLVENT     Solvant pour les calculs
-  --functional FUNCTIONAL, -f FUNCTIONAL
-                        Fonctionnelle à utiliser pour les calculs (défaut: PBE0)
-  --basis BASIS, -b BASIS
-                        Basis set à utiliser pour les calculs (défaut: DZP)
-```
+### 2. Calculs redox composite (7 calculs par conformère)
 
-**Sortie** :
-- Structures optimisées (neutres et réduites) dans le dossier `{name}_workdir/redox/`
-- Fichiers de sortie `.out` contenant les résultats des calculs sont stocké dans le dossier `{name}_workdir/redox/redox_results`
-
-### Analyseur de potentiels redox (analysis.py)
-
-Ce script analyse les résultats des calculs redox en traçant des corrélations entre le potentiel redox global et ses différentes contributions (EA, Edef, ΔΔU, TΔS) pour plusieurs molécules.
-
-**Fonctionnalités** :
-- Extraction automatique des potentiels redox et leurs composantes à partir des fichiers `redox_potentials.txt`
-- Génération de graphiques de corrélation avec régression linéaire et calcul du coefficient de détermination R²
-- Création de visualisations de qualité publication avec étiquetage automatique des molécules
-
-**Exemple d'utilisation** :
 ```bash
-python analysis.py L-DOPA_workdir/redox/ DOPA_workdir/redox/ Cl-DOPA_workdir/redox/ ...
+./redox_calc.py --input-dir catechol_workdir/conformers/results \
+                --name catechol \
+                --functional PBE0 --basis DZP --refinement-basis TZ2P \
+                --solvent Acetonitrile
 ```
 
-**Parmètres** :
-- Chemins vers les dossiers contenant les fichiers `redox_potentials.txt` générés par le script `redox_calc.py`
+Sorties : `catechol_workdir/redox/results/` avec analyse complète, géométries optimisées (réduit, oxydé), et orbitales frontières.
 
-**Sorties** :
-- Graphiques au format PNG montrant les corrélations entre chaque contribution et le potentiel redox global
-- Les graphiques sont sauvegardés dans un dossier numéroté `output_N` pour faciliter l'organisation
+### 3. Criblage rapide (mode predict-dg, 3 SP par conformère)
 
-**Note** : Pour obtenir des résultats significatifs, il est recommandé d'analyser au moins 5-10 molécules différentes afin d'établir des tendances fiables.
+```bash
+./redox_calc.py --predict-dg \
+                --input-dir catechol_workdir/conformers/results \
+                --name catechol --solvent Acetonitrile
+```
 
-## Détails des calculs
+Inclut ConceptualDFT et QTAIM sur chaque SP pour les modèles prédictifs.
 
-### Paramètres computationnels utilisés
+### 4. Analyse QTAIM/IQA
 
-#### Génération des conformères
-- Méthode initiale : RDKit avec 1000 conformères initiaux
-- Optimisation géométrique : DFTB3 avec le paramétrage 3ob-3-1
-- Calculs d'énergie finaux : ADF avec fonctionnelle PBE0, base TZP et dispersion Grimme3
-- Critère de filtrage RMSD : 0.5 Å
+```bash
+./qtaim_calc.py --name catechol --conformers conf_1 conf_2 \
+                --charges 0 -1 +1 \
+                --functional BLYP --basis TZP \
+                --quality Good --integration-accuracy 5.0
+```
 
-#### Calculs redox
-- Méthode DFT : ADF avec fonctionnelle PBE0, base TZP
-- Modèle de solvatation : COSMO
-- État réduit : Charge -1, spin polarisé 1.0
+## Documentation
 
-## Conseils d'utilisation
+- **`CLAUDE.md`** — guide technique détaillé (architecture interne, conventions, paramètres de chaque étape, schéma composite, cluster-continuum, exemples d'usage avancé)
+- **`docs/`** — notes méthodologiques et justifications
+- **`rapport/`** — rapport rédigé pour le laboratoire CARMeN, source LaTeX organisée en `rapport/parts/`
 
-1. **Workflow complet** :
-   - Générez les conformères avec `conformers_gen.py`
-   - Effectuez les calculs redox avec `redox_calc.py`
+## Cadre du projet
 
-2. **Choix de la structure SMILES** :
-   - Assurez-vous que la structure SMILES est correcte, notamment pour la stéréochimie
-   - Pour les molécules complexes, préparez le SMILES avec un logiciel comme ChemDraw
+Ce travail s'inscrit dans une collaboration entre :
 
-3. **Ressources computationnelles** :
-   - Les calculs peuvent être intensifs, surtout pour les grandes molécules
-   - Considérez l'utilisation d'un cluster de calcul pour les molécules avec plus de 40 atomes
+- **Laboratoire CARMeN** (UMR CNRS 6064, Université de Rouen Normandie) — développement du criblage computationnel
+- **Green Chemistry Centre of Excellence**, Université d'York — synthèse ciblée des candidats prometteurs
 
-4. **Analyse des résultats** :
-   - Le conformère avec l'énergie la plus basse n'est pas toujours celui avec les meilleures propriétés redox
-   - Examinez les structures optimisées pour comprendre les changements structurels lors de la réduction
-
-## Dépannage
-
-- **Erreur "ImportError: No module named scm.plams"** :
-  - Assurez-vous que les variables d'environnement d'AMS sont correctement configurées
-  - Exécutez les scripts avec `$AMSBIN/amspython` et non `python`
-
-- **Échec d'un calcul d'optimisation** :
-  - Vérifiez la structure initiale pour détecter d'éventuelles anomalies
-  - Essayez d'augmenter le nombre maximal d'itérations dans les paramètres d'optimisation
-
-- **Temps de calcul excessif** :
-  - Réduisez le nombre de conformères en ajustant les seuils d'énergie
-  - Utilisez une méthode moins coûteuse pour les calculs préliminaires
-
-## Licence
-
-Ce projet est disponible sous licence MIT. Voir le fichier LICENSE pour plus de détails.
-
-## Contributions
-
-Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou à soumettre une pull request.
+L'objectif applicatif est l'identification de molécules redox-actives organiques (catéchols, quinones substitués) pour la matière active d'électrodes positives dans les batteries de prochaine génération, en alternative aux technologies Li-ion.
 
 ## Citation
 
-Si vous utilisez ces scripts dans votre travail de recherche, veuillez citer :
+Si vous utilisez ce code dans une publication, merci de citer :
 
 ```
-AMS 2023.1, SCM, Theoretical Chemistry, Vrije Universiteit, Amsterdam, The Netherlands, https://www.scm.com
-PLAMS - Python Library for Automating Molecular Simulation
+Amsterdam Modeling Suite, SCM, Theoretical Chemistry, Vrije Universiteit,
+Amsterdam, The Netherlands, https://www.scm.com
+
+PLAMS — Python Library for Automating Molecular Simulation
+
+PLAMS V5, Lucas Delavoye, Laboratoire CARMeN (UMR CNRS 6064), 2026
 https://github.com/LucasDelav/PLAMS
 ```
+
+## Licence
+
+MIT. Voir le fichier `LICENSE`.

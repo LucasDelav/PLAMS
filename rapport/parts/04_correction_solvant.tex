@@ -1,0 +1,419 @@
+%=============================================================================
+\section{Généralisation multi-solvant}
+\label{sec:s4_general}
+\label{sec:generalisation}
+%=============================================================================
+
+La section précédente a développé des modèles prédictifs fondés sur la physique pour les 15 catéchols stables dans l'acétonitrile ($\varepsilon = 35{,}7$). L'objectif de cette section est de généraliser ces modèles à un ensemble élargi de 1411 conformères (630 couples molécule-solvant, 10 solvants, $\varepsilon = 1{,}9$--$78{,}4$).
+
+L'idée directrice est que les coefficients de régression dépendent du solvant via la constante diélectrique $\varepsilon$. Pour chaque propriété $Y$, le modèle s'écrit :
+\begin{equation}
+    Y = \alpha(\varepsilon)\,f_1 + \beta(\varepsilon)\,f_2 + \gamma(\varepsilon)
+    \label{eq:general_model}
+\end{equation}
+où $f_1, f_2$ sont des descripteurs moléculaires et $\alpha, \beta, \gamma$ sont des fonctions paramétriques de $\varepsilon$. Dix familles de fonctions sont testées systématiquement : constante (régression linéaire), quatre ordres d'approximants de Padé ([1/1], [1/2], [2/1], [2/2]), logarithme, exponentielle, sigmoïde, tangente hyperbolique et loi de puissance.
+
+\paragraph{Jeu de données.} Les données proviennent du pipeline redox (DFT complet) et du pipeline predict-dg (SP ioniques avec NormalModes) appliqués à 73 molécules dans 10 solvants COSMO, soit 1722 conformères bruts. La chaîne de filtrage retire successivement : (i)~159 conformères des 5 molécules exclues du jeu d'analyse --- Br-DA, Br-HMC, I-DA, I-HMC (attachement électronique dissociatif détecté par rupture C--X, $\Delta d > \SI{1.0}{\angstrom}$) plus L-DOPA (réorganisation conformationnelle extrême en oxydation) ; (ii)~24 conformères pour lesquels au moins un état DFT requis n'a pas convergé ; (iii)~111 conformères dans l'hexane ($\varepsilon = 1{,}88$) où l'EA verticale devient négative car le solvant ne stabilise plus l'anion ; (iv)~12 conformères sans LVC2 disponible ; et (v)~5 conformères restants avec valeurs LVC2 pathologiques ($|E_\text{relax}^\text{LVC2}| > \SI{150}{kJ/mol}$ malgré le seuil de coupure des modes basse fréquence, cf. section~\ref{sec:lvc}). Il reste \textbf{1411 conformères} (630 couples molécule-solvant, 10 solvants) pour les analyses Padé. Les propriétés cibles sont recalculées avec cohérence de base TZ2P. La décomposition $\Delta G = \pm\text{EA/IP} + E_\text{relax} + \Delta\Delta U - T\Delta S$ est vérifiée avec un résiduel moyen de \SI{0.03}{kJ/mol}.
+
+\subsection{Prédiction de IP et EA}
+\label{subsec:s4_ip_ea}
+
+\paragraph{Modèle.}
+Les descripteurs sont les énergies orbitales de Koopmans étendues : $f_1 = -\varepsilon_\text{HOMO}$ et $f_2 = -\varepsilon_\text{LUMO}$ (en kJ/mol). L'utilisation conjointe de HOMO et LUMO capture les effets de corrélation croisée entre structure électronique et potentiel de transfert de charge.
+
+\paragraph{Résultats.}
+Le tableau~\ref{tab:s4_ip_families} résume les performances des 10 familles. Le passage de coefficients constants ($R^2_\text{adj} = 0{,}710$, MAE = \SI{24.0}{kJ/mol}) aux approximants de Padé [1/1] ($R^2_\text{adj} = 0{,}974$, MAE = \SI{6.3}{kJ/mol}) traduit un gain considérable. Le Padé [2/1] atteint $R^2_\text{adj} = 0{,}978$ et MAE = \SI{5.2}{kJ/mol} (figure~\ref{fig:s4_ip_progression}).
+
+Pour l'EA (tableau~\ref{tab:s4_ea_families}), le Padé [2/1] atteint $R^2_\text{adj} = 0{,}997$ et MAE = \SI{3.7}{kJ/mol} (figure~\ref{fig:s4_ea_progression}), soit une erreur comparable à l'incertitude DFT.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{s4_IP_progression.png}
+    \caption{Prédiction de l'IP vertical ($n = 1411$). De gauche à droite : coefficients constants, Padé [1/1], Padé [2/1].}
+    \label{fig:s4_ip_progression}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{s4_EA_progression.png}
+    \caption{Prédiction de l'EA vertical ($n = 1411$). Même format que la figure~\ref{fig:s4_ip_progression}.}
+    \label{fig:s4_ea_progression}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Comparaison exhaustive des 10 familles de fonctions pour IP ($n = 1411$). Le nombre de paramètres inclut les trois coefficients $\alpha$, $\beta$, $\gamma$ paramétrés chacun par la famille.}
+\label{tab:s4_ip_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & $R^2_{\mathrm{adj}}$ & MAE & RMSE & $n_{\mathrm{param}}$ & AIC \\
+ & & (kJ/mol) & (kJ/mol) & & \\
+\midrule
+Padé [2/1] & 0,978 & 5,2 & 8,5 & 12 & 6005 \\
+Padé [1/2] & 0,975 & 5,6 & 9,1 & 12 & 6171 \\
+Padé [1/1] & 0,974 & 6,3 & 9,4 & 9 & 6258 \\
+Padé [2/2] & 0,974 & 6,0 & 9,4 & 15 & 6264 \\
+Tanh & 0,966 & 6,8 & 10,6 & 12 & 6599 \\
+Puissance & 0,965 & 6,9 & 10,7 & 9 & 6639 \\
+Exponentielle & 0,965 & 7,3 & 10,8 & 9 & 6641 \\
+Sigmoïde & 0,961 & 8,5 & 11,4 & 9 & 6795 \\
+Logarithme & 0,893 & 14,1 & 18,8 & 6 & 8195 \\
+Constante & 0,710 & 24,0 & 31,0 & 3 & 9584 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Comparaison exhaustive des 10 familles de fonctions pour EA ($n = 1411$).}
+\label{tab:s4_ea_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & $R^2_{\mathrm{adj}}$ & MAE & RMSE & $n_{\mathrm{param}}$ & AIC \\
+ & & (kJ/mol) & (kJ/mol) & & \\
+\midrule
+Padé [2/1] & 0,997 & 3,7 & 6,9 & 12 & 5405 \\
+Padé [2/2] & 0,997 & 3,7 & 6,9 & 15 & 5413 \\
+Padé [1/1] & 0,996 & 5,0 & 7,7 & 9 & 5714 \\
+Padé [1/2] & 0,996 & 5,2 & 8,1 & 12 & 5859 \\
+Puissance & 0,995 & 6,2 & 8,8 & 9 & 6071 \\
+Exponentielle & 0,995 & 5,0 & 8,9 & 9 & 6116 \\
+Tanh & 0,994 & 5,1 & 9,0 & 12 & 6146 \\
+Sigmoïde & 0,993 & 7,1 & 10,3 & 9 & 6512 \\
+Logarithme & 0,979 & 13,1 & 17,5 & 6 & 7998 \\
+Constante & 0,937 & 23,2 & 30,2 & 3 & 9509 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Discussion.}
+La supériorité systématique des approximants de Padé s'explique physiquement. L'approximant $\alpha(\varepsilon) = (a_0 + a_1\varepsilon)/(1 + b_1\varepsilon)$ converge vers une asymptote $a_1/b_1$ à grand $\varepsilon$, reproduisant le comportement de saturation de la solvatation COSMO. Les familles logarithmique et puissance ne saturent pas, ce qui explique leurs performances inférieures. L'ordre [2/1] capture la courbure de la réponse aux $\varepsilon$ intermédiaires (5--20), tandis que les ordres supérieurs ([2/2]) n'améliorent pas en raison du surparamétrage.
+
+\subsection{Prédiction de \texorpdfstring{$E_{\text{relax}}$}{Erelax}}
+\label{subsec:s4_erelax}
+
+\paragraph{Modèle.}
+Les données predict-dg (SP ioniques avec NormalModes sur la géométrie neutre) étant désormais disponibles pour l'ensemble du jeu de données, le LVC2 (équation~\ref{eq:lvc2}) est utilisé comme descripteur principal de $E_\text{relax}$. Le modèle retenu après sélection combine le LVC2 avec $-\varepsilon_\text{LUMO}$ : $f_1 = E_\text{relax}^\text{LVC2}$ et $f_2 = -\varepsilon_\text{LUMO}$ (kJ/mol), pour les deux processus.
+
+\paragraph{Résultats.}
+Les tableaux~\ref{tab:s4_erelax_ox_families} et~\ref{tab:s4_erelax_red_families} montrent que l'intégration du LVC2 améliore significativement la prédiction de $E_\text{relax}$ par rapport aux descripteurs CDFT seuls. Pour l'oxydation (figure~\ref{fig:s4_erelax_ox}), le Padé [2/1] atteint $R^2_\text{adj} = 0{,}434$ et MAE = \SI{4.9}{kJ/mol}, contre $R^2_\text{adj} = 0{,}198$ avec $\eta$+$\omega$ seuls. Pour la réduction (figure~\ref{fig:s4_erelax_red}), la famille logarithme atteint $R^2_\text{adj} = 0{,}440$ et MAE = \SI{3.0}{kJ/mol} (le Padé [2/1] donne un résultat équivalent à 0,001 près). Le LVC2 seul donne $R^2_\text{adj} = 0{,}40$ (ox) et $0{,}35$ (red), confirmant que la correction par $\varepsilon_\text{LUMO}$ apporte un gain résiduel modéré sur l'anharmonicité non capturée par le développement harmonique du LVC2.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{s4_E_relax_ox_progression.png}
+    \caption{Prédiction de $E_{\text{relax}}^{\text{ox}}$ par LVC2 + $\varepsilon_\text{LUMO}$ ($n = 1411$).}
+    \label{fig:s4_erelax_ox}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{s4_E_relax_red_progression.png}
+    \caption{Prédiction de $E_{\text{relax}}^{\text{red}}$ par LVC2 + $\varepsilon_\text{LUMO}$ ($n = 1411$).}
+    \label{fig:s4_erelax_red}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Comparaison des 10 familles pour $E_{\mathrm{relax}}^{\mathrm{ox}}$ ($n = 1411$), descripteurs LVC2 + $\varepsilon_\text{LUMO}$.}
+\label{tab:s4_erelax_ox_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & $R^2_{\mathrm{adj}}$ & MAE & RMSE & $n_{\mathrm{param}}$ & AIC \\
+ & & (kJ/mol) & (kJ/mol) & & \\
+\midrule
+Padé [2/1] & 0,434 & 4,9 & 8,0 & 12 & 5900 \\
+Exponentielle & 0,430 & 4,9 & 8,1 & 9 & 5907 \\
+Padé [1/1] & 0,430 & 4,9 & 8,1 & 9 & 5909 \\
+Padé [2/2] & 0,430 & 4,9 & 8,0 & 15 & 5915 \\
+Puissance & 0,429 & 4,9 & 8,1 & 9 & 5910 \\
+Padé [1/2] & 0,429 & 4,9 & 8,1 & 12 & 5913 \\
+Logarithme & 0,427 & 4,9 & 8,1 & 6 & 5911 \\
+Constante & 0,427 & 4,9 & 8,1 & 3 & 5910 \\
+Tanh & 0,423 & 4,9 & 8,1 & 12 & 5928 \\
+Sigmoïde & 0,396 & 4,7 & 8,3 & 9 & 5989 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Comparaison des 10 familles pour $E_{\mathrm{relax}}^{\mathrm{red}}$ ($n = 1411$), descripteurs LVC2 + $\varepsilon_\text{LUMO}$.}
+\label{tab:s4_erelax_red_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & $R^2_{\mathrm{adj}}$ & MAE & RMSE & $n_{\mathrm{param}}$ & AIC \\
+ & & (kJ/mol) & (kJ/mol) & & \\
+\midrule
+Logarithme & 0,440 & 3,0 & 5,1 & 6 & 4626 \\
+Padé [1/1] & 0,439 & 3,0 & 5,1 & 9 & 4630 \\
+Puissance & 0,439 & 3,0 & 5,1 & 9 & 4630 \\
+Exponentielle & 0,439 & 3,0 & 5,1 & 9 & 4631 \\
+Padé [2/1] & 0,439 & 3,0 & 5,1 & 12 & 4634 \\
+Constante & 0,439 & 3,1 & 5,1 & 3 & 4625 \\
+Padé [1/2] & 0,438 & 3,0 & 5,1 & 12 & 4636 \\
+Padé [2/2] & 0,438 & 3,0 & 5,1 & 15 & 4640 \\
+Sigmoïde & 0,437 & 3,1 & 5,1 & 9 & 4636 \\
+Tanh & 0,435 & 3,1 & 5,1 & 12 & 4643 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Discussion.}
+L'intégration du LVC2 améliore la prédiction de $E_\text{relax}^\text{ox}$ (MAE : 6,7 $\to$ \SI{4.9}{kJ/mol}, $-27\%$), confirmant que le hessien ionique à la géométrie neutre capture l'essentiel de la relaxation géométrique. Pour la réduction, l'amélioration est sensiblement plus marquée après application du seuil de coupure des modes basse fréquence (cf. section~\ref{sec:lvc}) : MAE \SI{3.0}{kJ/mol} contre \SI{3.8}{kJ/mol} dans le pipeline non filtré, soit un gain de 21\%. La faible dépendance en $\varepsilon$ (toutes les familles donnent des $R^2_\text{adj}$ similaires) confirme que la relaxation est principalement intramoléculaire. Le résidu provient de l'anharmonicité et des réarrangements conformationnels (famille DOPA), non capturés par le développement quadratique du LVC2.
+
+\subsubsection{Analyse multi-solvant des Fukui et qualité par solvant}
+\label{subsubsec:s42_fukui_multisolv}
+
+L'analyse $E_\text{relax}$ de la section~\ref{sec:lvc} reposait sur 15 catéchols dans l'acétonitrile uniquement. La disponibilité du dataset \texttt{predict\_dg/} multi-solvant complet permet d'étendre cette analyse à $n = 1522$ conformères dans 10 solvants (sans le filtre EA<0 appliqué en section~\ref{subsec:s4_ip_ea}, car ce filtre n'est pas pertinent pour la relaxation géométrique : la géométrie ionique optimisée existe même quand le solvant ne stabilise pas l'anion).
+
+\paragraph{Substitution de descripteur.}
+Le descripteur $f_\text{O}^\text{LUMO}$ utilisé en section~\ref{sec:lumo_correction} (composition de la LUMO sur les oxygènes par analyse SFO) n'est pas disponible dans le pipeline predict-dg multi-solvant : un calcul SFO post-traitement DENSF/AMS sur les RKF du cluster reste à effectuer. En attendant, la quasi-équivalence $r = 0{,}98$ documentée à la figure~\ref{fig:fukui_vs_lumo} entre $f_\text{O}^\text{LUMO}$ et $f^+_\text{sumO}$ justifie de substituer ce dernier dans l'analyse multi-solvant. Le modèle symétrique $f^\pm_\text{max,O}$ (équation~\ref{eq:fmaxO_noparam}) est utilisé : $f^+_\text{max,O} = \max_A f^+_A$ pour la réduction (sur les O), $f^-_\text{max,O}$ pour l'oxydation.
+
+\paragraph{Parité multi-solvant.}
+La figure~\ref{fig:s42_lvc2_parity} montre la prédiction LVC2 calibrée vs DFT pour $n = 1522$ conformères. La couleur encode le solvant (du polaire en rouge à l'apolaire en bleu). La performance globale est nettement inférieure à celle obtenue sur 15~catéchols (figure~\ref{fig:lvc2_brut}) : le mélange de familles chimiques distinctes (catéchols, quinones, lignanes, dérivés DOPA, hétérocycles) introduit une variance moléculaire qui domine la dispersion solvant.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{section42/s42_lvc2_parity_multisolv.png}
+    \caption{Prédiction $E_\text{relax}$ par LVC2 calibré vs DFT, multi-solvant. Couleur : solvant (10 niveaux par $\varepsilon$ décroissant). $n = 1522$.}
+    \label{fig:s42_lvc2_parity}
+\end{figure}
+
+\paragraph{Qualité par solvant.}
+La figure~\ref{fig:s42_mae_solvent} décompose la MAE LVC2 calibrée par solvant. La calibration est ajustée \emph{séparément} sur chaque solvant pour mesurer la qualité intrinsèque du LVC2 (et non l'effet de solvant sur le coefficient de calibration). Trois observations :
+\begin{itemize}
+    \item L'oxydation est mieux prédite que la réduction dans tous les solvants, cohérent avec la section~\ref{sec:lvc}.
+    \item L'eau ($\varepsilon = 78{,}4$) ne se distingue pas particulièrement comme cas limite pour $E_\text{relax}$, contrairement à ce qui est observé pour $\Delta G$ (section~\ref{subsec:s4_dg}). La relaxation géométrique est donc largement insensible au solvant, même fort.
+    \item Les solvants apolaires (Hexane, Toluene, Chloroform) donnent des MAE comparables aux solvants polaires : la solvatation COSMO ne perturbe pas significativement la qualité du développement LVC2 quadratique.
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{section42/s42_mae_per_solvent.png}
+    \caption{MAE LVC2 calibrée par solvant. Calibration linéaire ajustée indépendamment par solvant. $n$ par solvant indiqué en abscisse.}
+    \label{fig:s42_mae_solvent}
+\end{figure}
+
+\paragraph{Corrélation Fukui multi-solvant.}
+La figure~\ref{fig:s42_residual_fukui} montre la corrélation entre le résidu LVC2 calibré (par solvant) et le descripteur Fukui pertinent par processus ($f^+_\text{sumO}$ pour la réduction, $f^-_\text{sumO}$ pour l'oxydation). Le signal est faible mais cohérent avec l'analyse mono-solvant : la corrélation est légèrement plus marquée en réduction qu'en oxydation. La pente reste négative, confirmant le sens physique : plus la densité de Fukui est concentrée sur les oxygènes, plus le rearrangement géométrique non-harmonique est important.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{section42/s42_residual_vs_fukui.png}
+    \caption{Résidu LVC2 calibré vs descripteurs Fukui agrégés sur les oxygènes. Couleur : solvant. $n = 1522$.}
+    \label{fig:s42_residual_fukui}
+\end{figure}
+
+\paragraph{Modèle de correction sans paramètre.}
+La figure~\ref{fig:s42_fmax_correction} applique la correction symétrique $E_\text{relax}^\text{corr} = E_\text{relax}^\text{LVC2} \times (1 + |f^\pm_\text{max,O}|^{3/2})$ au jeu multi-solvant. Le modèle améliore légèrement la prédiction (MAE ox : 4,6 $\to$ \SI{4.4}{kJ/mol}, $R^2$ : 0{,}39 $\to$ 0{,}45 ; red : 6,9 $\to$ \SI{6.8}{kJ/mol}, $R^2$ : 0{,}01 $\to$ 0{,}01). L'amélioration est plus modeste que sur 13 catéchols (table~\ref{tab:erelax_summary}), ce qui suggère que le modèle Fukui-O capture une physique spécifique à la famille catéchol et se généralise mal à d'autres familles (quinones, lignanes).
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{section42/s42_fmax_correction.png}
+    \caption{Correction $f^\pm_\text{max,O}$ multi-solvant : LVC2 corrigé calibré vs DFT. Couleur : solvant. $n = 1522$.}
+    \label{fig:s42_fmax_correction}
+\end{figure}
+
+\paragraph{Distribution par famille moléculaire.}
+La figure~\ref{fig:s42_heatmap} montre la médiane $|E_\text{relax}^\text{LVC2} - E_\text{relax}^\text{DFT}|$ (sans calibration) par famille moléculaire et par solvant. Les familles DA/DOPA et DHI présentent les écarts les plus marqués, en particulier dans les solvants polaires. La famille catéchol (sur laquelle l'analyse de la section~\ref{sec:lvc} a été développée) est l'une des mieux prédites.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{section42/s42_residual_heatmap.png}
+    \caption{Médiane de $|E_\text{relax}^\text{LVC2} - E_\text{relax}^\text{DFT}|$ (kJ/mol) par famille moléculaire et solvant. Sans calibration. $n = 1522$.}
+    \label{fig:s42_heatmap}
+\end{figure}
+
+\input{figures/section42/s42_performance_table.tex}
+
+\paragraph{Bilan multi-solvant.}
+L'extension à $n = 1522$ confirme la validité du LVC2 comme descripteur principal de $E_\text{relax}$ multi-solvant, mais révèle deux limites :
+\begin{enumerate}
+    \item Le modèle de correction Fukui-O calibré sur 13~catéchols Acetonitrile (section~\ref{sec:fukui_correction}) se généralise modestement aux autres familles chimiques, le gain en MAE étant divisé par un facteur 3 environ ($\Delta$MAE : $-0{,}3$ vs $-0{,}9$ kJ/mol pour la réduction).
+    \item La qualité de prédiction est relativement insensible au solvant ($\varepsilon$ varie de 1{,}88 à 78{,}4), confirmant le caractère intramoléculaire de la relaxation.
+\end{enumerate}
+Le levier principal pour réduire l'erreur reste donc la diversité chimique du jeu d'entraînement, plutôt que le choix de solvant ou l'ajout de descripteurs $\varepsilon$-dépendants.
+
+\subsection{Prédiction de \texorpdfstring{$T\Delta S$}{TdS}}
+\label{subsec:s4_tds}
+
+\paragraph{Modèle.}
+Les descripteurs sont $\mu$ et $\eta$ (kJ/mol), inspirés de la Section~3.5.
+
+\paragraph{Résultats.}
+$T\Delta S$ est un terme petit (écart-type : \SI{3.1}{kJ/mol} en oxydation, \SI{2.7}{kJ/mol} en réduction). Les modèles atteignent $R^2_\text{adj} = 0{,}246$ et MAE = \SI{1.8}{kJ/mol} en oxydation (tableau~\ref{tab:s4_tds_ox_families}), et $R^2_\text{adj} = 0{,}454$ et MAE = \SI{1.4}{kJ/mol} en réduction (tableau~\ref{tab:s4_tds_red_families}). Les différentes familles donnent des résultats quasi identiques, la variance résiduelle étant dominée par la variabilité moléculaire.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Comparaison des 10 familles pour $T\Delta S_{\mathrm{ox}}$ ($n = 1411$).}
+\label{tab:s4_tds_ox_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & $R^2_{\mathrm{adj}}$ & MAE & RMSE & $n_{\mathrm{param}}$ & AIC \\
+ & & (kJ/mol) & (kJ/mol) & & \\
+\midrule
+Padé [2/1] & 0,246 & 1,8 & 2,6 & 12 & 2733 \\
+Exponentielle & 0,245 & 1,8 & 2,6 & 9 & 2733 \\
+Padé [1/1] & 0,245 & 1,8 & 2,6 & 9 & 2733 \\
+Puissance & 0,244 & 1,8 & 2,6 & 9 & 2735 \\
+Padé [1/2] & 0,243 & 1,8 & 2,6 & 12 & 2739 \\
+Constante & 0,243 & 1,8 & 2,7 & 3 & 2731 \\
+Logarithme & 0,242 & 1,8 & 2,7 & 6 & 2734 \\
+Padé [2/2] & 0,242 & 1,8 & 2,6 & 15 & 2743 \\
+Tanh & 0,242 & 1,8 & 2,6 & 12 & 2741 \\
+Sigmoïde & 0,236 & 1,9 & 2,7 & 9 & 2749 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Comparaison des 10 familles pour $T\Delta S_{\mathrm{red}}$ ($n = 1411$).}
+\label{tab:s4_tds_red_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & $R^2_{\mathrm{adj}}$ & MAE & RMSE & $n_{\mathrm{param}}$ & AIC \\
+ & & (kJ/mol) & (kJ/mol) & & \\
+\midrule
+Exponentielle & 0,454 & 1,4 & 2,0 & 9 & 1973 \\
+Logarithme & 0,454 & 1,4 & 2,0 & 6 & 1970 \\
+Sigmoïde & 0,453 & 1,4 & 2,0 & 9 & 1973 \\
+Padé [2/1] & 0,453 & 1,4 & 2,0 & 12 & 1977 \\
+Padé [1/2] & 0,453 & 1,4 & 2,0 & 12 & 1977 \\
+Padé [1/1] & 0,453 & 1,4 & 2,0 & 9 & 1975 \\
+Padé [2/2] & 0,454 & 1,4 & 2,0 & 15 & 1977 \\
+Tanh & 0,453 & 1,4 & 2,0 & 12 & 1978 \\
+Puissance & 0,453 & 1,4 & 2,0 & 9 & 1975 \\
+Constante & 0,451 & 1,4 & 2,0 & 3 & 1973 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Prédiction de \texorpdfstring{$\Delta\Delta U$}{DDU}}
+\label{subsec:s4_ddu}
+
+\paragraph{Modèle.}
+Les descripteurs sont $\eta$ et $\mu$ (kJ/mol), conformément à la Section~3.4.
+
+\paragraph{Résultats.}
+En oxydation (tableau~\ref{tab:s4_ddu_ox_families}), $R^2_\text{adj} = 0{,}666$ et MAE = \SI{0.9}{kJ/mol}. En réduction (tableau~\ref{tab:s4_ddu_red_families}), $R^2_\text{adj} = 0{,}936$ et MAE = \SI{0.7}{kJ/mol}. La dureté $\eta$ est un excellent prédicteur de $\Delta\Delta U_\text{red}$ pour les catéchols non-halogénés.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Comparaison des 10 familles pour $\Delta\Delta U_{\mathrm{ox}}$ ($n = 1411$).}
+\label{tab:s4_ddu_ox_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & $R^2_{\mathrm{adj}}$ & MAE & RMSE & $n_{\mathrm{param}}$ & AIC \\
+ & & (kJ/mol) & (kJ/mol) & & \\
+\midrule
+Puissance & 0,666 & 0,9 & 1,2 & 9 & 634 \\
+Padé [1/1] & 0,666 & 0,9 & 1,2 & 9 & 634 \\
+Exponentielle & 0,666 & 0,9 & 1,2 & 9 & 634 \\
+Logarithme & 0,666 & 0,9 & 1,2 & 6 & 632 \\
+Padé [1/2] & 0,666 & 0,9 & 1,2 & 12 & 639 \\
+Padé [2/1] & 0,666 & 0,9 & 1,2 & 12 & 639 \\
+Tanh & 0,665 & 0,9 & 1,2 & 12 & 642 \\
+Padé [2/2] & 0,665 & 0,9 & 1,2 & 15 & 646 \\
+Constante & 0,653 & 1,0 & 1,3 & 3 & 681 \\
+Sigmoïde & 0,543 & 1,1 & 1,5 & 9 & 1072 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Comparaison des 10 familles pour $\Delta\Delta U_{\mathrm{red}}$ ($n = 1411$).}
+\label{tab:s4_ddu_red_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & $R^2_{\mathrm{adj}}$ & MAE & RMSE & $n_{\mathrm{param}}$ & AIC \\
+ & & (kJ/mol) & (kJ/mol) & & \\
+\midrule
+Puissance & 0,936 & 0,7 & 1,0 & 9 & $-80$ \\
+Padé [2/2] & 0,936 & 0,7 & 1,0 & 15 & $-72$ \\
+Exponentielle & 0,936 & 0,7 & 1,0 & 9 & $-77$ \\
+Padé [2/1] & 0,936 & 0,7 & 1,0 & 12 & $-73$ \\
+Padé [1/2] & 0,936 & 0,7 & 1,0 & 12 & $-68$ \\
+Sigmoïde & 0,936 & 0,7 & 1,0 & 9 & $-68$ \\
+Tanh & 0,936 & 0,7 & 1,0 & 12 & $-62$ \\
+Padé [1/1] & 0,935 & 0,7 & 1,0 & 9 & $-56$ \\
+Logarithme & 0,935 & 0,7 & 1,0 & 6 & $-54$ \\
+Constante & 0,933 & 0,7 & 1,0 & 3 & $-16$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Prédiction combinée de \texorpdfstring{$\Delta G°$}{DG}}
+\label{subsec:s4_dg}
+
+Les meilleurs modèles de chaque composante sont combinés via la décomposition thermodynamique :
+\begin{align}
+    \Delta G_\text{red} &= -\text{EA}_\text{pred} + E_{\text{relax,red}}^{\text{pred}} + \Delta\Delta U_\text{red}^{\text{pred}} - T\Delta S_\text{red}^{\text{pred}} \\
+    \Delta G_\text{ox}  &= \text{IP}_\text{pred} + E_{\text{relax,ox}}^{\text{pred}} + \Delta\Delta U_\text{ox}^{\text{pred}} - T\Delta S_\text{ox}^{\text{pred}}
+\end{align}
+
+\paragraph{Résultats.}
+En oxydation, le modèle combiné atteint $R^2_\text{adj} = 0{,}967$ et MAE = \SI{6.0}{kJ/mol} (figure~\ref{fig:s4_dg_ox}). En réduction, $R^2_\text{adj} = 0{,}994$ et MAE = \SI{5.7}{kJ/mol} (figure~\ref{fig:s4_dg_red}). Le budget d'erreur (figure~\ref{fig:s4_error_budget}) montre que IP et $E_\text{relax}$ contribuent de manière comparable en oxydation (MAE $\approx$ \SI{5}{kJ/mol} chacun), tandis qu'en réduction, EA (\SI{3.7}{kJ/mol}) et $E_\text{relax}$ (\SI{3.8}{kJ/mol}) se partagent l'erreur.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.75\textwidth]{s4_dG_ox_combined.png}
+    \caption{$\Delta G_\text{ox}$ prédit vs DFT pour 1411 conformères dans 10 solvants.}
+    \label{fig:s4_dg_ox}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.75\textwidth]{s4_dG_red_combined.png}
+    \caption{$\Delta G_\text{red}$ prédit vs DFT pour 1411 conformères dans 10 solvants.}
+    \label{fig:s4_dg_red}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\textwidth]{s4_error_budget.png}
+    \caption{Budget d'erreur (MAE par composante) pour l'oxydation et la réduction.}
+    \label{fig:s4_error_budget}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Bilan des meilleurs modèles pour chaque composante de $\Delta G$ ($n = 1411$).}
+\label{tab:s4_bilan}
+\begin{tabular}{lllccc}
+\toprule
+Composante & Descripteurs & Famille & $R^2_\text{adj}$ & MAE (kJ/mol) & $n_\text{param}$ \\
+\midrule
+IP & $-\varepsilon_\text{HOMO}$, $-\varepsilon_\text{LUMO}$ & Padé [2/1] & 0,978 & 5,2 & 12 \\
+EA & $-\varepsilon_\text{HOMO}$, $-\varepsilon_\text{LUMO}$ & Padé [2/1] & 0,997 & 3,7 & 12 \\
+$E_\text{relax}^\text{ox}$ & LVC2, $-\varepsilon_\text{LUMO}$ & Padé [2/1] & 0,421 & 4,9 & 12 \\
+$E_\text{relax}^\text{red}$ & LVC2, $-\varepsilon_\text{LUMO}$ & Padé [2/1] & 0,316 & 3,8 & 12 \\
+$\Delta\Delta U_\text{ox}$ & $\eta$, $\mu$ & Puissance & 0,666 & 0,9 & 9 \\
+$\Delta\Delta U_\text{red}$ & $\eta$, $\mu$ & Puissance & 0,936 & 0,7 & 9 \\
+$T\Delta S_\text{ox}$ & $\mu$, $\eta$ & Padé [2/1] & 0,246 & 1,8 & 12 \\
+$T\Delta S_\text{red}$ & $\mu$, $\eta$ & Exp. & 0,454 & 1,4 & 9 \\
+\midrule
+$\Delta G_\text{ox}$ & \multicolumn{2}{l}{combiné} & 0,967 & 6,0 & --- \\
+$\Delta G_\text{red}$ & \multicolumn{2}{l}{combiné} & 0,994 & 5,7 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Analyse des outliers.}
+En oxydation, les outliers se répartissent entre deux sources : (i) la famille DOPA et les hétérocycles (P-DHI, P-IQ), dont les erreurs sur $E_\text{relax}$ sont les plus élevées en raison de réarrangements conformationnels non capturés par le LVC2, et (ii) l'eau ($\varepsilon = 78{,}4$) où l'IP est systématiquement surestimé de $\sim$\SI{33}{kJ/mol}, suggérant une limitation du modèle COSMO aux $\varepsilon$ extrêmes.
+
+En réduction, l'eau domine les outliers : les EA des catéchols dans l'eau sont systématiquement sous-estimés de $\sim$\SI{30}{kJ/mol}. L'alcool sinapylique dans l'hexane est le seul outlier non-aqueux, avec une erreur dominée par $E_\text{relax}$.
+
+\paragraph{Discussion.}
+Le modèle combiné prédit $\Delta G_\text{red}$ avec MAE = \SI{5.7}{kJ/mol} et $\Delta G_\text{ox}$ avec MAE = \SI{6.0}{kJ/mol}, sans optimisation géométrique ionique, réduisant le coût computationnel d'un facteur~$\sim$7. L'intégration du LVC2 a réduit la MAE en oxydation de \SI{8.3}{} à \SI{6.0}{kJ/mol} ($-28\%$), faisant passer $E_\text{relax}$ du goulot d'étranglement principal à un niveau comparable à l'erreur sur IP. L'eau représente le cas limite : la MAE par solvant passe de 4--5 kJ/mol (solvants organiques) à $\sim$\SI{18}{kJ/mol} dans l'eau, probablement en raison des limites du modèle COSMO implicite à $\varepsilon$ élevé. Le mode cluster-continuum implémenté en Section~2.2 pourrait améliorer ce point.
+

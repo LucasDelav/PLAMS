@@ -1,0 +1,23 @@
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Comparaison des familles de fonctions pour la prédiction de IP.}
+\label{tab:s4_ip_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & $R^2_{\mathrm{adj}}$ & MAE & RMSE & $n_{\mathrm{param}}$ & AIC \\
+ & & (kJ/mol) & (kJ/mol) & & \\
+\midrule
+Padé [2/1] & 0.9777 & 5.3 & 8.6 & 12 & 6104 \\
+Padé [1/2] & 0.9751 & 5.7 & 9.1 & 12 & 6259 \\
+Padé [1/1] & 0.9735 & 6.3 & 9.4 & 9 & 6343 \\
+Padé [2/2] & 0.9724 & 6.3 & 9.6 & 15 & 6407 \\
+Tanh & 0.9674 & 6.6 & 10.4 & 12 & 6640 \\
+Puissance & 0.9656 & 6.9 & 10.7 & 9 & 6711 \\
+Exponentielle & 0.9656 & 7.3 & 10.7 & 9 & 6713 \\
+Sigmoïde & 0.9611 & 8.5 & 11.4 & 9 & 6885 \\
+Logarithme & 0.8945 & 14.1 & 18.8 & 6 & 8289 \\
+Constante & 0.7117 & 24.1 & 31.1 & 3 & 9704 \\
+\bottomrule
+\end{tabular}
+\end{table}

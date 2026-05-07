@@ -1,4 +1,68 @@
-*workdir*
-from_smiles.sh
-input.txt*
-redox_correlations/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# PLAMS workdirs and calculation data
+*_workdir/
+plams_workdir/
+plams_workdir.*/
+
+# Calculation outputs (large, regeneratable)
+data/
+dataset/
+dataset_predict_dg/
+data_gallic/
+output/
+predict_dg_results/
+test_dataset/
+results/
+archive/
+
+# Specific test calculations under rapport/
+rapport/test_screening/
+
+# Cached analysis results
+analysis/formula_search/results/all_results.parquet
+
+# Ephemeral input lists (re-generated per screening campaign)
+input_missing_*.txt
+
+# LaTeX build artifacts (PDF intentionally NOT ignored)
+rapport/*.aux
+rapport/*.log
+rapport/*.out
+rapport/*.toc
+rapport/*.lof
+rapport/*.lot
+rapport/*.bbl
+rapport/*.blg
+rapport/*.fdb_latexmk
+rapport/*.fls
+rapport/*.synctex.gz
+
+# Logs and temporary files
+*.tmp
+*.bak
+*~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code session state
+.claude/

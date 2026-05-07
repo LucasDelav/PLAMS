@@ -1,0 +1,10 @@
+# Acide gallique (3,4,5-trihydroxybenzoique) + sa quinone correspondante
+# Candidat ajoute pour evaluation greffage Buchard (esterification COOH<->OH polymere)
+# Pyrogallol + COOH, M(catechol)=170.12, M(quinone)=168.10
+# Couple 2e- (catechol/o-quinone hydroxylee, OH residuel en position 5)
+
+# Catechol (forme reduite)
+O=C(O)c1cc(O)c(O)c(O)c1 GALLIC_ACID
+
+# Quinone (forme oxydee)
+O=C(O)C1=CC(=O)C(=O)C(O)=C1 GALLIC_QUINONE

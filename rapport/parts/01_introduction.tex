@@ -1,0 +1,71 @@
+%=============================================================================
+\section{Introduction}
+%=============================================================================
+
+Le déploiement à grande échelle de la technologie Li-ion pour le stockage d'énergie soulève aujourd'hui des préoccupations convergentes sur trois plans. Sur le plan environnemental, l'extraction du lithium et du cobalt entraîne une empreinte hydrique et minière importante, et le recyclage en fin de vie reste partiel. Sur le plan social, les conditions d'extraction du cobalt, dont la production est concentrée principalement en République Démocratique du Congo, font régulièrement l'objet d'alertes documentées. Sur le plan stratégique enfin, la concentration géographique des réserves de lithium en Amérique du Sud et de la chaîne de raffinage et d'assemblage des cellules en Asie crée une dépendance lourde de l'ensemble des pays consommateurs envers un nombre restreint de fournisseurs, contraignant structurellement le développement du stockage électrochimique à l'échelle mondiale.
+
+Les matériaux redox-actifs organiques constituent une voie alternative à fort potentiel pour les électrodes des batteries de prochaine génération. Construits à partir d'éléments abondants (C, H, N, O, S) et accessibles depuis des précurseurs biosourcés tels que les algues, le bois, les plantes ou les huiles végétales, ils peuvent être produits localement à partir de ressources cultivables sur l'ensemble du globe et recyclés en fin de vie. Leur structure permet en outre d'ajuster les propriétés électrochimiques par fonctionnalisation, ouvrant un espace de conception adapté aux exigences applicatives. Parmi les motifs candidats pour la matière active d'électrode positive, le couple catéchol/quinone occupe une place particulière : un transfert biélectronique entre deux formes redox stables, un espace chimique vaste accessible par substitution du cycle aromatique, et une capacité documentée à stocker de la charge via l'interconversion réversible carbonyle/hydroxyle. Le défi consiste alors à identifier, dans cet espace combinatoire, les substituants conduisant à un potentiel redox, une solubilité et une stabilité compatibles avec les contraintes d'application.
+
+Le travail présenté dans ce rapport, mené sur près d'un an et demi, s'inscrit dans une collaboration entre le laboratoire CARMeN (UMR CNRS 6064, Université de Rouen Normandie), où le criblage computationnel a été développé, et le Green Chemistry Centre of Excellence de l'Université d'York, qui prendra en charge la synthèse ciblée des candidats les plus prometteurs. La finalité du pipeline développé au CARMeN est ainsi de fournir une liste restreinte de molécules dont les propriétés calculées justifient le coût expérimental de la synthèse et de la caractérisation.
+
+La DFT prédit quantitativement les propriétés redox des molécules organiques, mais son application au criblage de masse se heurte à un coût prohibitif : pour chaque candidat, l'évaluation de l'énergie libre de Gibbs de transfert électronique exige une optimisation géométrique de l'état ionique (réduit ou oxydé) suivie d'une analyse vibrationnelle, dont le coût dépasse largement celui des calculs effectués sur le seul état neutre. La conduite d'un tel criblage suppose d'abord un environnement de calcul automatisé : le système de workflows développé dans ce travail, construit sur l'Amsterdam Modeling Suite (AMS) et la bibliothèque PLAMS, orchestre la génération de conformères, les optimisations DFT successives et les analyses sur l'ensemble du protocole, garantissant la reproductibilité et permettant le passage à l'échelle. Sur cette base, deux voies sont explorées pour réduire effectivement le coût des prédictions : des modèles prédictifs physiquement motivés, construits sur des descripteurs calculables depuis le seul état neutre, et une approche par apprentissage automatique sur descripteurs tabulaires et géométriques, qui sert de référence comparative pour situer la performance des modèles physiques.
+
+\begin{wrapfigure}{r}{0.42\textwidth}
+\vspace{-0.6em}
+\centering
+\begin{tikzpicture}[scale=0.78, >=Latex, font=\footnotesize]
+  % Axes
+  \draw[->] (0,0) -- (8,0) node[right] {$\xi$};
+  \draw[->] (0,0) -- (0,6) node[above] {$\Delta E$};
+
+  % Neutral PES (black) : minimum at (3, 1)
+  \draw[thick, domain=1.0:5.0, smooth, samples=80]
+       plot (\x, {1 + 0.4*(\x-3)^2});
+  \node[font=\footnotesize\bfseries] at (2, 2.5) [above] {neutre};
+
+  % Oxidized PES (blue) : minimum at (5, 2.6), passes through (3, 5) = IP top
+  \draw[thick, red!75!black, domain=3.0:7.0, smooth, samples=80]
+       plot (\x, {2.6 + 0.6*(\x-5)^2});
+  \node[red!80!black, font=\footnotesize\bfseries] at (7.05, 5) [right] {oxydé};
+
+  % Vertical guide line at neutral geometry (x=3)
+  \draw[gray!50, dashed, very thin] (3, 0) -- (3, 5.05);
+
+  % Dots at minima
+  \filldraw[black] (3, 1) circle (1.7pt);
+  \filldraw[red!85!black] (5, 2.6) circle (1.7pt);
+
+  % IP (vertical, blue, normal thickness)
+  \draw[->, red!85!black, thick] (3, 1) --
+       node[midway, right=2pt, red!85!black] {IP} (3, 5);
+
+  % E_relax^ox (dashed slanted)
+  \draw[->, red!85!black, dashed, thick] (3, 5) --
+       node[midway, sloped, above, red!80!black] {$E_{\text{relax}}^{\text{ox}}$} (5, 2.6);
+
+  % ΔE_ox (solid slanted, emphasised : extra thick + bold label)
+  \draw[->, red!85!black, very thick] (3, 1) --
+       node[midway, sloped, above, red!80!black, font=\bfseries] {$\Delta E_{\text{ox}}$} (5, 2.6);
+\end{tikzpicture}
+\caption{Décomposition du transfert électronique pour l'oxydation, le long d'une coordonnée généralisée $\xi$. À la géométrie d'équilibre du neutre, IP est le coût énergétique d'un transfert vertical d'un électron vers l'état oxydé ; $E_{\text{relax}}^{\text{ox}}$ est la stabilisation associée à la réoptimisation géométrique de cet état. Le schéma équivalent pour la réduction s'obtient en remplaçant chaque terme « ox » par son analogue « red » (état oxydé par état réduit, IP par $-\text{EA}$, et $E_{\text{relax}}^{\text{ox}}$ par $E_{\text{relax}}^{\text{red}}$).}
+\label{fig:decomposition_thermo}
+\vspace{-0.6em}
+\end{wrapfigure}
+
+La construction de tels modèles substitutifs repose sur une décomposition thermodynamique du potentiel redox en contributions distinctes : affinité électronique (EA) ou potentiel d'ionisation (IP) verticaux, énergie de relaxation géométrique ($E_{\text{relax}}$), contribution thermique interne ($\Delta\Delta U$) et terme entropique ($T\Delta S$). Cette décomposition est formalisée comme suit~:
+\label{sec:decomposition}
+\begin{align}
+\Delta G_{\text{red}} &= -\text{EA} + E_{\text{relax}}^{\text{red}} + \Delta\Delta U - T\Delta S \label{eq:decomposition_red} \\
+\Delta G_{\text{ox}}  &= \text{IP} + E_{\text{relax}}^{\text{ox}} + \Delta\Delta U - T\Delta S \label{eq:decomposition_ox}
+\end{align}
+Dans ces équations, EA et IP désignent l'affinité électronique et le potentiel d'ionisation verticaux, définis positifs par convention :
+\[
+\text{EA} = E^{\text{neutre}} - E^{\text{réduit,sp}}, \qquad \text{IP} = E^{\text{oxydé,sp}} - E^{\text{neutre}},
+\]
+où $E^{\text{ion,sp}}$ représente l'énergie de l'état ionique (réduit ou oxydé) évaluée à la géométrie d'équilibre du neutre (calcul \emph{single point}, sans réoptimisation). EA et IP mesurent ainsi le coût énergétique d'un transfert électronique à géométrie figée. L'énergie de relaxation, indicée par l'état ionique correspondant,
+\[
+E_{\text{relax}}^{\text{ion}} = E^{\text{ion,opt}} - E^{\text{ion,sp}} \qquad (\text{ion} \in \{\text{red},\, \text{ox}\})
+\]
+est alors la stabilisation associée à la réoptimisation géométrique de l'état ionique vers son propre minimum. Enfin, $\Delta\Delta U$ regroupe les corrections d'énergie interne (énergie de point zéro et énergie thermique) entre formes neutre et ionique, tandis que $T\Delta S$ est la contribution entropique à l'énergie libre de Gibbs.
+
+Cette décomposition isole les contributions dominantes au potentiel redox et identifie $E_{\text{relax}}$, $\Delta\Delta U$ et $T\Delta S$ comme cibles privilégiées des modèles substitutifs : si chacun de ces termes peut être estimé à partir de propriétés de l'état neutre, les optimisations géométriques des états ioniques deviennent superflues pour le criblage. Le développement de ces modèles est mené sur une base de données de catéchols et de quinones substitués calculés en acétonitrile, puis étendu à neuf autres solvants pour dégager une dépendance explicite à la permittivité diélectrique.
