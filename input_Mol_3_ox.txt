@@ -1,0 +1,1 @@
+OCC1=CC(=O)C(=O)C=C1C2=NC3OCCC3O2 Mol_3_ox
