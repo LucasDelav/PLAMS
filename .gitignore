@@ -35,6 +35,16 @@ analysis/formula_search/results/all_results.parquet
 
 # Ephemeral input lists (re-generated per screening campaign)
 input_missing_*.txt
+input_buchard_*.txt
+input_Mol_*.txt
+input.txt
+water_chunks/
+
+# Backups occasionnels au format *.BACKUP-<date>
+*.BACKUP*
+
+# LaTeX log racine (autre que rapport/)
+texput.log
 
 # LaTeX build artifacts (PDF intentionally NOT ignored)
 rapport/*.aux

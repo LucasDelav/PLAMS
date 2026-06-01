@@ -1,1 +1,0 @@
-O=C1C=CC(=CC1=O)/C=C/C2OC3CCOC3O2 Mol_7_ox

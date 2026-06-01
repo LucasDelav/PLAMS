@@ -4,33 +4,35 @@ Système de workflows de chimie computationnelle pour le criblage haut-débit de
 
 ## Pipelines
 
-Le système comporte quatre pipelines principaux, chacun pilotable depuis son script de tête :
+Trois pipelines de calcul, chacun pilotable depuis son script de tête :
 
 | Script | Pipeline | Description |
 |---|---|---|
 | `conformers_gen.py` | **qmconf** | Génération de conformères (RDKit) → optimisation GFN1-xTB → filtre Boltzmann → DFT opt+freq+solvant |
 | `redox_calc.py` | **qmredox** | Calculs redox composite TZ2P+DZP avec réutilisation du neutre, bases cohérentes |
 | `qtaim_calc.py` | **qmqtaim** | Analyse topologique QTAIM/IQA et décomposition énergétique |
-| `analysis/` | **qmanalysis** | Module d'analyse post-calcul (corrélations, modèles prédictifs, vibronique) |
+
+Et un module d'analyse post-calcul, **qmanalysis**, qui rassemble la recherche de modèles prédictifs (descripteurs CDFT, LVC vibronique, Padé--Born) dans `analysis/formula_search/`.
 
 ## Architecture du projet
 
 ```
 PlamsV5/
-├── conformers_gen.py     # Pipeline conformères
-├── redox_calc.py         # Pipeline redox
-├── qtaim_calc.py         # Pipeline QTAIM
-├── common/               # Module partagé (constantes, frequency, workspace, …)
-├── qmconf/               # Logique pipeline conformères
-├── qmredox/              # Logique pipeline redox
-├── qmqtaim/              # Logique pipeline QTAIM
-├── qmanalysis/           # Module d'analyse fréquence-Edef
-├── visualization/        # Génération de figures
-├── analysis/             # Analyses post-calcul et modèles prédictifs
-├── slurm/                # Scripts SLURM pour cluster (CRIANN)
-├── docs/                 # Notes méthodologiques
-└── rapport/              # Rapport LaTeX (CARMeN), source dans rapport/parts/
+├── conformers_gen.py         # Pipeline conformères (étape 1 → 4)
+├── redox_calc.py             # Pipeline redox (7 calculs + composite TZ2P+DZP)
+├── qtaim_calc.py             # Pipeline QTAIM/IQA
+├── common/                   # Module partagé (constantes, frequency, workspace, …)
+├── qmconf/, qmredox/, qmqtaim/, qmanalysis/   # Logique de chaque pipeline
+├── visualization/            # Génération de figures (post-calcul)
+├── analysis/
+│   ├── formula_search/       # Scripts actifs de recherche de modèles (partie 3 du rapport)
+│   └── archive/              # Scripts ponctuels conservés pour traçabilité
+├── slurm/                    # Scripts SLURM pour cluster (CRIANN)
+├── docs/                     # Notes méthodologiques
+└── rapport/                  # Rapport LaTeX (CARMeN), source dans rapport/parts/
 ```
+
+Le dossier `analysis/archive/` contient les scripts ponctuels (extractions, balayages, figures one-shot) qui ont servi à la rédaction du rapport et qui sont gardés pour la traçabilité. Les scripts d'analyse encore régulièrement utilisés sont dans `analysis/formula_search/`.
 
 ## Caractéristiques clés (V5)
 
@@ -38,7 +40,7 @@ PlamsV5/
 - **Réutilisation du neutre optimisé** entre pipelines via `neutral_rkf_paths.json` (le neutre n'est pas recalculé dans le pipeline redox)
 - **GFN1-xTB** comme méthode semi-empirique pour l'optimisation des conformères (remplace DFTB)
 - **Filtre Boltzmann** sur les énergies libres DFT (seuil 0.10 par défaut)
-- **Mode `--predict-dg`** : protocole de criblage rapide en 3 SP+NormalModes au lieu de 7 calculs (gain ~5×)
+- **Mode `--predict-dg`** : protocole de criblage rapide en 3 SP (NormalModes sur le neutre, gradient seul sur les ions) au lieu de 7 calculs (gain ~5×)
 - **Cluster-continuum solvation** pour les solvants protiques (eau, méthanol) via molécules de solvant explicites + COSMO
 
 ## Prérequis
