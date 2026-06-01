@@ -1,60 +1,255 @@
+\clearpage
 %=============================================================================
 \appendix
 
-\section{Descripteurs de Fukui testés pour la correction de $E_{\text{relax}}$}
-\label{app:fukui}
+\section{Compléments à la recherche de modèles prédictifs}
+\label{app:models}
 
-Le tableau~\ref{tab:fukui_exhaustive} récapitule l'ensemble des descripteurs de Fukui et de CDFT testés en corrélation avec le résidu $E_{\text{relax}} - E_{\text{relax}}^{\text{LVC2}}$. Pour chaque descripteur, la corrélation est évaluée séparément pour la réduction (descripteur $f^+$ ou dual) et l'oxydation (descripteur $f^-$ ou dual). Les descripteurs sont regroupés par catégorie. Seuls les descripteurs intégrés sur les oxygènes atteignent la significativité ($p < 0.05$) en réduction ; aucun descripteur n'est significatif en oxydation.
+Cette annexe rassemble, pour chaque composante de la décomposition thermodynamique, les approches testées dans la partie~\ref{sec:analyse} avec leurs MAE de validation croisée, ainsi que les formules complètes des descripteurs employés. L'objectif est de documenter le criblage qui a conduit aux modèles retenus, sans alourdir le récit principal. Sauf mention contraire, toutes les MAE sont en kJ/mol, obtenues en validation croisée à 5 plis groupée par molécule.
+
+\subsection{Affinité électronique et potentiel d'ionisation verticaux}
+\label{app:ea_ip_search}
+
+\paragraph{Itinéraire des approches.}
+La partie~\ref{sec:EA_IP} a retracé le chemin qui mène de Koopmans à la forme CDFT enrichie. Le tableau~\ref{tab:app_ea_ip_journey} en récapitule les étapes et leur précision, sur le seul jeu acétonitrile (154 conformères) puis en multi-solvant (1336 conformères).
 
 \begin{table}[H]
 \centering
-\caption{Corrélations entre les descripteurs de Fukui/CDFT et le résidu LVC2 ($n = 13$ molécules). Les valeurs significatives ($p < 0.05$) sont indiquées en gras.}
-\label{tab:fukui_exhaustive}
+\caption{Approches testées pour la prédiction de l'EA et de l'IP verticaux. Les valeurs sont les MAE de validation croisée à 5 plis groupée par molécule. Forme retenue en gras. Sur le jeu multi-solvant, EA et IP intègrent la correction Padé[1/1]-Born~; les autres composantes restent à coefficients constants.}
+\label{tab:app_ea_ip_journey}
 \footnotesize
-\begin{tabular}{llrrrr}
+\begin{tabular}{l l c c c c}
 \toprule
- & & \multicolumn{2}{c}{Réduction} & \multicolumn{2}{c}{Oxydation} \\
-\cmidrule(lr){3-4} \cmidrule(lr){5-6}
-Catégorie & Descripteur & $r$ & $p$ & $r$ & $p$ \\
+ & & \multicolumn{2}{c}{Acétonitrile (154)} & \multicolumn{2}{c}{Multi-solvant (1336)} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+\textbf{Approche} & \textbf{Descripteurs} & EA & IP & EA & IP \\
 \midrule
-\multirow{3}{*}{Intégrés sur O}
-& $f^{\pm}_{\text{sumO}}$ & $\mathbf{-0.67}$ & $\mathbf{0.012}$ & $-0.16$ & $0.59$ \\
-& $\Delta f_{\text{sumO}}$ & $\mathbf{-0.69}$ & $\mathbf{0.009}$ & $-0.35$ & $0.24$ \\
-& $f^0_{\text{sumO}}$ & $\mathbf{-0.67}$ & $\mathbf{0.012}$ & $-0.16$ & $0.59$ \\
-\midrule
-\multirow{2}{*}{Intégrés sur C}
-& $f^{\pm}_{\text{sumC}}$ & $+0.54$ & $0.058$ & $+0.07$ & $0.82$ \\
-& $\Delta f_{\text{sumC}}$ & $+0.54$ & $0.058$ & $+0.36$ & $0.22$ \\
-\midrule
-\multirow{2}{*}{Intégrés sur H}
-& $f^{\pm}_{\text{sumH}}$ & $+0.04$ & $0.88$ & $-0.36$ & $0.23$ \\
-& $\Delta f_{\text{sumH}}$ & $+0.04$ & $0.88$ & $-0.36$ & $0.23$ \\
-\midrule
-\multirow{2}{*}{Atomiques (O)}
-& $\max_A f^{\pm}_A$ (O) & $-0.34$ & $0.25$ & $-0.16$ & $0.60$ \\
-& $\Delta f_{\max}$ / $\Delta f_{\min}$ & $-0.34$ & $0.25$ & $+0.39$ & $0.19$ \\
-\midrule
-\multirow{3}{*}{Top-$k$ atomiques}
-& Top-2 $\Delta f$ & $-0.41$ & $0.16$ & $+0.38$ & $0.20$ \\
-& Top-3 $\Delta f$ & $-0.38$ & $0.20$ & $+0.41$ & $0.17$ \\
-& Top-5 $\Delta f$ & $-0.31$ & $0.30$ & $+0.35$ & $0.24$ \\
-\midrule
-\multirow{3}{*}{CDFT globaux}
-& $\mu$ (pot. chimique) & $-0.14$ & $0.66$ & $-0.25$ & $0.40$ \\
-& $\eta$ (dureté) & $-0.30$ & $0.32$ & $-0.44$ & $0.13$ \\
-& $\omega$ (électrophilicité) & $+0.20$ & $0.52$ & --- & --- \\
-\midrule
-Référence & $f_{\text{O}}^{\text{LUMO}}$ ($n = 15$) & $\mathbf{-0.68}$ & $\mathbf{0.005}$ & $-0.49$ & $0.061$ \\
+Koopmans calibré       & $-\varepsilon_\text{LUMO}$ / $-\varepsilon_\text{HOMO}$ & 2.3 & 3.5 & --- & --- \\
+Politzer--Murray ALIE  & $-V_{S,\min}$ / $\bar{I}_{S,\min}$ & 63.8 & 49 & --- & --- \\
+CDFT $(\mu, \eta)$     & $\mu, \eta$ & 2.18 & 3.32 & --- & --- \\
+~~~~$+\, \omega^+$ (EA) / $1/\omega^-$ (IP) & $\mu, \eta, \omega^\pm_\text{Gázquez}$ & 1.91 & 2.94 & --- & --- \\
+\textbf{\quad{}$\times (1 + a\,f^2_{\max/\min})$} & + correction Fukui & \textbf{1.78} & \textbf{2.84} & \textbf{1.9} & \textbf{3.1} \\
+Variantes nucléophilie (IP) & $\omega^-$ direct, $N_\text{Chattaraj}$, $N_G^\text{Hoffmann}$ & --- & $\geq 2.94$ & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Exemples de Fichiers d'Entrée AMS}
+\paragraph{Descripteurs CDFT employés.}
+Les indices de DFT conceptuelle dérivent du couple $(\varepsilon_\text{HOMO}, \varepsilon_\text{LUMO})$ obtenu en TZ2P. Pour chaque conformère~:
+\begin{equation}
+\mu = \frac{\varepsilon_\text{HOMO} + \varepsilon_\text{LUMO}}{2}, \qquad
+\eta = \frac{\varepsilon_\text{LUMO} - \varepsilon_\text{HOMO}}{2},
+\label{eq:app_cdft_mu_eta}
+\end{equation}
+\begin{equation}
+\omega = \frac{\mu^2}{2\eta}, \qquad
+\omega^{\pm} = \frac{(\eta \pm 2\mu)^2}{8\eta}, \qquad
+\frac{1}{\omega^-} = \frac{2\eta}{(\eta/2 - \mu)^2} \;=\; \frac{8\eta}{(\eta - 2\mu)^2}.
+\label{eq:app_gazquez}
+\end{equation}
+$\omega$ est l'électrophilicité de Parr\cite{parr1999}~; $\omega^+$ et $\omega^-$ sont les pouvoirs directionnels de Gázquez\cite{gazquez2007}, formes symétriques mesurant la propension à accepter (pour l'EA) et à céder (pour l'IP) un électron.
+
+\paragraph{Variantes de nucléophilie comparées à $1/\omega^-$.}
+Pour l'IP, trois indices alternatifs ont été testés afin de vérifier qu'aucun ne dépassait $1/\omega^-$ comme troisième descripteur~:
+\begin{itemize}[noitemsep]
+\item $\omega^-$ direct (Gázquez), forme duale de $\omega^+$~;
+\item $N = 1/\omega$ de Chattaraj\cite{chattaraj2009}, simple inverse de l'électrophilicité de Parr~;
+\item $N_G$ de Hoffmann\cite{hoffmann2024}, indice récent fondé sur l'hyperdureté.
+\end{itemize}
+Aucun ne descend en deçà de la MAE de $1/\omega^-$ ($\SI{2.94}{kJ/mol}$) après réajustement complet des coefficients de régression.
+
+\paragraph{Familles de dépendance en solvant testées.}
+Pour les coefficients EA et IP, dix formes paramétriques $\beta_X(\varepsilon)$ ont été comparées (tableau~\ref{tab:ms_families} de la partie~\ref{sec:multisolvant}). Leurs expressions explicites sont rassemblées dans le tableau~\ref{tab:app_solvent_families}.
+
+\begin{table}[H]
+\centering
+\caption{Familles de dépendance en solvant testées pour les coefficients EA et IP. $g = (\varepsilon - 1)/\varepsilon$ est le facteur de Born. Forme retenue ($\star$) : Padé[1/1]-Born, pour sa motivation physique (saturation finie du champ de réaction).}
+\label{tab:app_solvent_families}
+\footnotesize
+\begin{tabular}{l l c}
+\toprule
+\textbf{Famille} & \textbf{Forme paramétrique} & $n_\text{param}$ \\
+\midrule
+Constante                    & $\beta_X = a_0$ & 1 \\
+Linéaire-Born                & $\beta_X = a_0 + a_1\, g$ & 2 \\
+Onsager-linéaire             & $\beta_X = a_0 + a_1\, (\varepsilon - 1)/(2\varepsilon + 1)$ & 2 \\
+Logarithme                   & $\beta_X = a_0 + a_1\, \log(1 + g)$ & 2 \\
+Puissance                    & $\beta_X = a_0 + a_1\, g^n$ & 3 \\
+Exp.\ saturante              & $\beta_X = a_0 + a_1\, (1 - e^{-b g})$ & 3 \\
+Sigmoïde                     & $\beta_X = a_0 + a_1\, / (1 + e^{-b (g - c)})$ & 4 \\
+Tanh                         & $\beta_X = a_0 + a_1\, \tanh(b g)$ & 3 \\
+\textbf{Padé[1/1]-Born}\,$\star$ & $\beta_X = (a_0 + a_1\, g) / (1 + b_1\, g)$ & 3 \\
+Padé[2/1]-Born               & $\beta_X = (a_0 + a_1\, g + a_2\, g^2) / (1 + b_1\, g)$ & 4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Énergie de relaxation \texorpdfstring{$E_\text{relax}$}{E\_relax}}
+\label{app:erelax_search}
+
+\paragraph{Estimateurs vibroniques testés.}
+Six estimateurs vibroniques de $E_\text{relax}$, à différents niveaux de raffinement, ont été comparés à la référence DFT (tableau~\ref{tab:app_vibronic} et partie~\ref{sec:Erelax}, table~\ref{tab:vibronic_methods}).
+
+\begin{table}[H]
+\centering
+\caption{Estimateurs vibroniques de $E_\text{relax}$, sans enrichissement CDFT, sur les 154 conformères acétonitrile (seuil de fréquence $\omega_\text{cut} = \SI{100}{cm^{-1}}$). $g$~: gradient de l'énergie ionique évaluée sur la géométrie neutre~; $H$~: Hessien (du neutre, de l'ion vertical, ou de l'ion optimisé selon la méthode).}
+\label{tab:app_vibronic}
+\footnotesize
+\begin{tabular}{l l l}
+\toprule
+\textbf{Méthode} & \textbf{Formule} & \textbf{Hessien utilisé} \\
+\midrule
+LVC  & $-\tfrac{1}{2}\, g^\top H_\text{neutre}^{-1}\, g$ & neutre (réutilisé) \\
+LVC2 & $-\tfrac{1}{2}\, g^\top H_\text{ion,SP}^{-1}\, g$ & ion vertical (1 SP) \\
+Dusch & $-\tfrac{1}{2} \sum_{\omega_j \geq \omega_\text{cut}} \lambda_j\, (\tilde q \cdot v_j)^2$ & ion optimisé (Huang--Rhys) \\
+Morse & Dusch + correction de Morse mode à mode & ion optimisé \\
+VPT2  & potentiel cubique mode à mode, 3 contraintes & ion optimisé \\
+QVC   & LVC $\times \bigl(1 + \sum (\Delta\omega/\omega)\, \lambda_i/\lambda\bigr)$ & neutre + ion vertical \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Les méthodes \emph{à gradient} (LVC, LVC2, QVC) prédisent $E_\text{relax}$ à $\sim\SI{3}{kJ/mol}$ avec la seule géométrie neutre~; les méthodes \emph{à déplacement réel} (Dusch, Morse, VPT2) requièrent l'optimisation ionique --- précisément ce qu'on cherche à éviter --- et divergent sur les modes raides de haute fréquence pour Dusch/Morse. LVC a été retenu pour la suite, pour son coût minimal et sa robustesse.
+
+\paragraph{Itinéraire du modèle complet.}
+La partie~\ref{sec:Erelax} construit progressivement le modèle final $(\eta, \text{LVC}) \times (1 + a\, f^2)$. Le tableau~\ref{tab:app_erelax_journey} récapitule les étapes intermédiaires.
+
+\begin{table}[H]
+\centering
+\caption{Approches testées pour $E_\text{relax}$ sur 154 conformères acétonitrile (CV-MAE en kJ/mol). Forme retenue en gras. \og{}n.s.\fg{} = corrélation non significative avec la cible ($|r| < 0.3$).}
+\label{tab:app_erelax_journey}
+\footnotesize
+\begin{tabular}{l c c}
+\toprule
+\textbf{Approche} & \textbf{MAE $E_\text{relax}^\text{ox}$} & \textbf{MAE $E_\text{relax}^\text{red}$} \\
+\midrule
+RMSD géométrique neutre-ion & n.s. & n.s. \\
+$(\eta) \times (1 + a\, f^2)$, sans terme vibronique & 5.1 & 4.0 \\
+LVC seul (sans enrichissement CDFT) & 2.8 & 2.7 \\
+\textbf{$(\eta, \text{LVC}) \times (1 + a\, f^2)$} & \textbf{2.45} & \textbf{2.53} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Le pool linéaire ablaté contenait $\mu$ et $\mu^2$.}
+Au moment de l'ablation, le pool linéaire complet $(\mu, \eta, \mu^2, \text{LVC})$ a été soumis à l'ajustement. Les coefficients de $\mu$ et de $\mu^2$ s'annulent à l'ajustement, et la forme retenue se réduit naturellement à $(\eta, \text{LVC})$. Cette absence du potentiel chimique pour $E_\text{relax}$, alors qu'il est pilier des modèles d'EA, d'IP, de $\Delta\Delta U$ et de $T\Delta S$, est documentée dans la partie~\ref{sec:Erelax} et a une lecture physique~: la relaxation est un effet vibronique, sans rapport direct avec la position énergétique du couple HOMO-LUMO que $\mu$ résume.
+
+\paragraph{Formule du LVC retenue.}
+Avec $g$ le gradient de l'énergie ionique évaluée sur la géométrie neutre et $\{(\omega_k, Q_k)\}$ les modes normaux du neutre,
+\begin{equation}
+E_\text{relax}^\text{LVC} = -\frac{1}{2} \sum_{\omega_k \geq \omega_\text{cut}} \frac{(g \cdot Q_k)^2}{\omega_k^2}, \qquad \omega_\text{cut} = \SI{100}{cm^{-1}}.
+\label{eq:app_lvc}
+\end{equation}
+Quatre seuils $\omega_\text{cut}$ ont été testés ($50, 100, 150, 200~\text{cm}^{-1}$)~: au-dessous de $50~\text{cm}^{-1}$, les modes mous parasitent la prédiction (valeurs aberrantes liées aux rotations et translations résiduelles)~; au-dessus de $150~\text{cm}^{-1}$, on perd de l'information utile. La valeur $100~\text{cm}^{-1}$ minimise la CV-MAE sur le jeu acétonitrile.
+
+\paragraph{Variantes de descripteurs de Fukui pour la correction multiplicative.}
+La correction Fukui apparaissant dans le modèle final, $(1 + a\, f^\pm_{\max})$, a été comparée à un large catalogue de variantes. Toutes sont construites à partir des indices condensés à l'atome $A$,
+\begin{equation}
+f^+_A = q_A(N) - q_A(N+1), \quad
+f^-_A = q_A(N-1) - q_A(N), \quad
+f^0_A = \tfrac{1}{2}(f^+_A + f^-_A), \quad
+\Delta f_A = f^+_A - f^-_A,
+\label{eq:app_fukui_atomic}
+\end{equation}
+où les charges atomiques $q_A$ sont obtenues par partition de Hirshfeld. Les variantes scalaires testées comme troisième descripteur sont rassemblées dans le tableau~\ref{tab:app_fukui_variants}.
+
+\begin{table}[H]
+\centering
+\caption{Variantes de descripteurs de Fukui scalaires testées en correction multiplicative dans les modèles d'$E_\text{relax}$ et de $\Delta\Delta U$. Pour les corrections \og{}red-type\fg{} (réduction et $\Delta\Delta U_\text{red}$), $f^\pm$ désigne $f^+$~; pour les corrections \og{}ox-type\fg{} (oxydation et $\Delta\Delta U_\text{ox}$), $f^\pm$ désigne $f^-$.}
+\label{tab:app_fukui_variants}
+\footnotesize
+\begin{tabular}{l l}
+\toprule
+\textbf{Catégorie} & \textbf{Variantes scalaires testées} \\
+\midrule
+Maximum atomique & $\max_A f^+_A$, $\max_A f^-_A$, $\max_A f^0_A$, $\max_A \Delta f_A$ \\
+Maximum atomique au carré & $(\max_A f^\pm_A)^2 \equiv f^2_{\max}/f^2_{\min}$ \\
+Sommes par famille d'atomes & $\sum_{A \in \mathcal{O}} f^\pm_A$, $\sum_{A \in \mathcal{C}} f^\pm_A$, $\sum_{A \in \mathcal{H}} f^\pm_A$, idem pour $f^0$ et $\Delta f$ \\
+Top-$k$ atomiques sur $\Delta f$ & $\sum_{A \in \text{top-}2} \Delta f_A$, $\sum_{A \in \text{top-}3} \Delta f_A$, $\sum_{A \in \text{top-}5} \Delta f_A$ \\
+LUMO localisée sur oxygènes & $f_\text{O}^\text{LUMO}$ (analyse SFO, sous-ensemble acétonitrile) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Sur les versions antérieures restreintes aux catéchols ($n = 13$ molécules), les descripteurs intégrés sur les oxygènes ($f^\pm_{\text{sumO}}, f^0_{\text{sumO}}, \Delta f_{\text{sumO}}$) atteignaient seuls la significativité statistique en réduction ($p < 0.05$, $|r| \approx 0.67$--$0.69$). Étendu au jeu complet (68 molécules), le pouvoir prédictif s'est rééquilibré sur $(\max_A f^\pm_A)^2$ tous atomes confondus, signe que la spécificité oxygène propre à la famille catéchol ne se généralise pas à toutes les sous-familles redox-actives du jeu.
+
+\subsection{Corrections thermiques \texorpdfstring{$\Delta\Delta U$}{ddU} et \texorpdfstring{$T\Delta S$}{TdS}}
+\label{app:thermal_search}
+
+\paragraph{Itinéraire des approches.}
+Les corrections thermiques $\Delta\Delta U$ et $T\Delta S$ ont donné lieu au criblage le plus large du travail, car aucune intuition de DFT conceptuelle ne pointait \emph{a priori} le bon descripteur. Le tableau~\ref{tab:app_thermal_journey} récapitule l'itinéraire.
+
+\begin{table}[H]
+\centering
+\caption{Approches testées pour $\Delta\Delta U$ et $T\Delta S$ sur 154 conformères acétonitrile (CV-MAE en kJ/mol). Forme retenue en gras. La forme finale est symétrique entre réduction et oxydation~; la variante red-type utilise $f^2_{\max}$, la ox-type utilise $f^2_{\min}$.}
+\label{tab:app_thermal_journey}
+\footnotesize
+\begin{tabular}{l c c c c}
+\toprule
+ & \multicolumn{2}{c}{$\Delta\Delta U$} & \multicolumn{2}{c}{$T\Delta S$} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+\textbf{Approche} & red & ox & red & ox \\
+\midrule
+Prédiction par la moyenne (constante) & 3.5 & 1.5 & 2.32 & 2.47 \\
+$\Delta\text{ZPE}$ (différence d'énergie de point zéro) & n.s. & n.s. & --- & --- \\
+$\Delta U^\text{RRHO}$ depuis fréquences SP & 1.9 & 1.3 & 2.0 & 2.4 \\
+$\Delta\eta$ (changement de dureté neutre $\to$ ion vertical) & 1.7 & 1.2 & n.s. & n.s. \\
+$(\mu, \eta)$ linéaire & 1.5 & 1.2 & 1.8 & 2.3 \\
+\textbf{$(\mu, \eta) \times (1 + a\, f^2_{\max/\min})$} & \textbf{0.87} & \textbf{1.16} & \textbf{1.63} & \textbf{2.14} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Le passage de $(\mu, \eta)$ linéaire à $(\mu, \eta) \times (1 + a f^2)$ apporte un gain significatif sur $\Delta\Delta U$ ($\sim 40\%$ en réduction et $-6\%$ en oxydation)~; le gain est plus modeste sur $T\Delta S$ ($-10\%$ environ par cible).
+
+\paragraph{Bibliothèque de descripteurs fréquentiels testés.}
+Avant de retenir le couple $(\mu, \eta) + $ Fukui, un large catalogue de descripteurs fréquentiels a été construit à partir des modes normaux issus du mode \texttt{predict-dg} (le seul SP neutre suffit). Pour chaque conformère, sept familles de descripteurs ont été testées (tableau~\ref{tab:app_freq_descr}).
+
+\begin{table}[H]
+\centering
+\caption{Bibliothèque de descripteurs fréquentiels testés pour $\Delta\Delta U$ et $T\Delta S$. Chaque famille a été évaluée séparément pour les fréquences du neutre, de l'anion vertical et du cation vertical, plus les variations $\Delta\omega = \omega_\text{ion} - \omega_\text{neutre}$ appariées par ordre énergétique et par recouvrement de vecteurs propres. Aucune ne dépasse le modèle $(\mu, \eta) + $ Fukui au-delà de $0.3$~kJ/mol de gain, et toutes ont été écartées pour la simplicité physique.}
+\label{tab:app_freq_descr}
+\footnotesize
+\begin{tabular}{l l}
+\toprule
+\textbf{Famille} & \textbf{Descripteurs scalaires} \\
+\midrule
+A. Comptes par fenêtre & nombre de modes dans chaque tranche $[\omega_a, \omega_b]$ (plusieurs schémas) \\
+B. Moments par coupure & moyenne, écart-type, asymétrie, kurtose sous $\omega < \omega_\text{cut}$ \\
+C. Quantiles et extrêmes & $\min$, $\max$, $p_{10}$, $p_{25}$, $p_{50}$, $p_{75}$, $p_{90}$, IQR \\
+D. Sommes RRHO partielles & $\sum U_\text{vib}, \sum T S_\text{vib}$ par fenêtre, version standard et qRRHO Grimme \\
+E. Moments puissance & moyenne de $\omega^p$ pour $p \in \{-2, -1, 1, 2, 3\}$ \\
+F. Descripteurs $\Delta\omega$ & moyenne signée, $|\Delta\omega|$ moyen et max, RMS, comptes de modes amollis \\
+G. Différences RRHO appariées & $\sum \Delta U_\text{vib}$ et $\sum \Delta T S_\text{vib}$ par fenêtre \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Dépendance en solvant explicitement balayée puis écartée.}
+Avant de fixer les coefficients de $\Delta\Delta U$ et de $T\Delta S$ à des valeurs $\varepsilon$-indépendantes, sept familles paramétriques ont été testées pour la dépendance en solvant sur le pool $(\mu, \eta)$~: \emph{constante}, \emph{Onsager}, \emph{linéaire-Born}, \emph{logarithme}, \emph{Padé[1/1]-Born}, \emph{Padé[2/1] en $\varepsilon$}, \emph{Padé[2/2] en $\varepsilon$}. Sur le jeu multi-solvant, les coefficients constants sortent en tête à $0.1$~kJ/mol près des familles à dépendance explicite~: la complexité supplémentaire ne se justifie pas. Le rapport retient donc la forme constante pour les deux termes intramoléculaires~; la dépendance au solvant n'y agit qu'implicitement, via les descripteurs CDFT qui dépendent eux-mêmes du COSMO.
+
+\paragraph{Balayage brute force sur les sous-ensembles de descripteurs.}
+Indépendamment du choix de la dépendance en solvant, un balayage par énumération exhaustive a été mené sur les sous-ensembles de descripteurs et les formes paramétriques. Pour chaque cible ($\Delta\Delta U^\text{red}$, $\Delta\Delta U^\text{ox}$, $T\Delta S^\text{red}$, $T\Delta S^\text{ox}$) et pour des sous-ensembles de $k = 1$ à $5$ descripteurs tirés du pool $\{\mu, \eta, \omega, \mu^2, \Delta\eta, \text{Fukui},\, \dots\}$, deux familles de formes ont été comparées~:
+\begin{itemize}[noitemsep]
+\item formes polynomiales~: monômes de degré $\leq 3$ sur le sous-ensemble, jusqu'à 12~monômes par cible~;
+\item formes Padé(1,1) rationnelles~: rapports d'une forme linéaire sur une autre, sur le sous-ensemble.
+\end{itemize}
+L'évaluation se fait en MAE de validation croisée à 5 plis groupée par molécule. Le modèle final $(\mu, \eta) \times (1 + a\,f^2)$ ressort du criblage comme le compromis précision/parcimonie le plus favorable~: les variantes à $k = 4$ ou $5$ descripteurs gagnent moins de $0.2$~kJ/mol pour deux à trois paramètres supplémentaires, au prix d'une moins bonne stabilité de la solution.
+
+\section{Exemples de fichiers d'entrée AMS}
+\label{app:ams_inputs}
 %=============================================================================
 
-Les exemples suivants illustrent les fichiers d'entrée générés par PLAMS pour chaque pipeline.
+Cette annexe illustre les fichiers d'entrée AMS générés par PLAMS pour le pipeline redox du présent travail. Le schéma composite TZ2P+DZP retenu (§\ref{sec:analyse}) combine deux types de calculs~:
+\begin{itemize}[noitemsep]
+\item des \emph{optimisations géométriques + fréquences en DZP} pour le conformère neutre (étape 4 du pipeline conformères, réutilisée telle quelle en redox) et pour les deux états ioniques anion et cation~;
+\item des \emph{single points en TZ2P} sur ces géométries optimisées, qui fournissent les énergies électroniques de référence avant assemblage avec les corrections thermiques DZP.
+\end{itemize}
+Tous les calculs utilisent la fonctionnelle hybride PBE0 dans le moteur ADF d'AMS, avec le modèle de solvant continu COSMO (cavité Delley). Les exemples ci-dessous correspondent au solvant acétonitrile~; le drapeau \texttt{Solv name=...} est l'unique différence entre solvants.
 
-\subsection{DFT Optimisation + Fréquences (Pipeline Conformères, étape 4)}
+\subsection{Optimisation et fréquences DZP du neutre (étape 4 du pipeline conformères)}
+
+Ce fichier est produit par le pipeline conformères et réutilisé directement comme \og{}point neutre\fg{} du pipeline redox, sans relancer aucun calcul. Le mot-clé \texttt{NormalModes Yes} déclenche le calcul du Hessien et les corrections thermodynamiques.
 
 \begin{lstlisting}
 Task GeometryOptimization
@@ -93,9 +288,9 @@ Engine ADF
 EndEngine
 \end{lstlisting}
 
-\subsection{Optimisation Géométrique DZP (Pipeline Redox)}
+\subsection{Optimisation et fréquences DZP des états ioniques}
 
-Cet exemple montre l'optimisation géométrique DZP utilisée pour les états chargés (reduced\_opt, oxidized\_opt). Le neutre n'est pas re-optimisé (réutilisation du RKF conformères) :
+Pour l'anion (\texttt{Charge -1}) et le cation (\texttt{Charge +1}), une optimisation géométrique complète est relancée à partir de la géométrie neutre, avec un calcul de fréquences associé. Le calcul est ouvert spin (\texttt{Unrestricted Yes}, \texttt{SpinPolarization 1}) pour les ions à couche ouverte. La correction de Klamt-Schuurmann pour les espèces chargées est activée via \texttt{Charged method=CONJ CORR}.
 
 \begin{lstlisting}
 Task GeometryOptimization
@@ -104,7 +299,7 @@ System
   Atoms
     ...
   End
-  Charge -1       ! -1 (reduit) ou +1 (oxyde)
+  Charge -1       ! ou +1 pour le cation
 End
 
 Properties
@@ -127,25 +322,29 @@ Engine ADF
   Solvation
     Surf Delley
     Solv name=Acetonitrile
-    Charged method=CONJ CORR  ! CORR pour les ions
+    Charged method=CONJ CORR
     C-Mat POT
     SCF VAR ALL
   End
 EndEngine
 \end{lstlisting}
 
-\subsection{Single-Point TZ2P (Pipeline Redox)}
+\subsection{Raffinement énergétique en TZ2P (cœur du schéma composite)}
 
-Les single-points TZ2P sont calculés pour le raffinement énergétique du schéma composite. Pas de modes normaux :
+Sur chacune des trois géométries optimisées (neutre, anion, cation), un calcul \og{}single point\fg{} en base TZ2P fournit l'énergie électronique de référence~$E_e^{\text{TZ2P}}$. Aucun mode normal n'est calculé à ce stade. L'énergie libre composite s'obtient alors par
+\[
+G_{\text{composite}}(X) = E_e^{\text{TZ2P}}(X) + \bigl[G^{\text{DZP}}(X) - E_e^{\text{DZP}}(X)\bigr],
+\]
+où les corrections thermiques entre crochets proviennent du calcul DZP correspondant. Pour le neutre, la consigne \texttt{Charged method=CONJ} suffit~; pour les ions, on conserve \texttt{CONJ CORR} ainsi que la spin-polarisation.
 
 \begin{lstlisting}
 Task SinglePoint
 
 System
   Atoms
-    ...  ! Geometrie neutre ou ionique optimisee
+    ...                              ! geometrie neutre OU ionique optimisee
   End
-  Charge -1  ! 0 (neutral_tz2p), -1 (reduced_sp/tz2p), +1 (oxidized_sp/tz2p)
+  Charge -1                          ! 0 / -1 / +1 selon l'etat
 End
 
 Engine ADF
@@ -156,53 +355,17 @@ Engine ADF
   Relativity
     Level None
   End
-  Unrestricted Yes   ! No pour neutral_tz2p
-  SpinPolarization 1 ! 0 pour neutral_tz2p
+  Unrestricted Yes                   ! No pour le neutre
+  SpinPolarization 1                 ! 0 pour le neutre
   XC
     Hybrid PBE0
   End
   Solvation
     Surf Delley
     Solv name=Acetonitrile
-    Charged method=CONJ CORR  ! CONJ pour neutral_tz2p
+    Charged method=CONJ CORR         ! CONJ seul pour le neutre
     C-Mat POT
     SCF VAR ALL
   End
 EndEngine
 \end{lstlisting}
-
-\subsection{Analyse QTAIM/IQA}
-
-\begin{lstlisting}
-Task SinglePoint
-
-System
-  Atoms
-    ...
-  End
-  Charge 0  ! 0, -1 ou +1 selon l'etat analyse
-End
-
-Engine ADF
-  Basis
-    Type TZP
-    Core None
-  End
-  Relativity
-    Level None
-  End
-  NumericalQuality Good
-  XC
-    Hybrid PBE0
-  End
-  QTAIM
-    Enabled Yes
-    AnalysisLevel Full
-    Source Yes
-  End
-  IQA
-    Enabled Yes
-  End
-EndEngine
-\end{lstlisting}
-

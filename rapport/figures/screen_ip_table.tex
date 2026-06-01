@@ -1,0 +1,22 @@
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{Screen des 10 familles de correction de solvant pour l'IP vertical ($n=1336$). $\star$~: famille retenue (Padé[1/1]-Born, physiquement motivée).}
+\label{tab:ms_ip_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & MAE & RMSE & $R^2$ & $n_{\mathrm{par}}$ & AIC \\
+ & (kJ/mol) & (kJ/mol) & & & \\
+\midrule
+Puissance & 3.1 & 5.5 & 0.991 & 10 & 4575 \\
+Padé[2/1]-Born & 3.1 & 5.5 & 0.991 & 13 & 4600 \\
+Padé[1/1]-Born\,$\star$ & 3.1 & 5.5 & 0.991 & 10 & 4594 \\
+Linéaire-Born & 3.2 & 5.7 & 0.991 & 7 & 4649 \\
+Exp.\ saturante & 3.6 & 6.1 & 0.990 & 10 & 4833 \\
+Sigmoïde & 3.9 & 6.5 & 0.988 & 13 & 5008 \\
+Onsager-linéaire & 5.1 & 7.9 & 0.982 & 7 & 5528 \\
+Tanh & 6.6 & 10.7 & 0.967 & 13 & 6367 \\
+Logarithme & 9.8 & 15.1 & 0.936 & 7 & 7260 \\
+Constante & 21.7 & 32.4 & 0.703 & 4 & 9301 \\
+\bottomrule
+\end{tabular}
+\end{table}

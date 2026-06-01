@@ -1,0 +1,22 @@
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{Screen des 10 familles pour l'EA vertical ($n=1336$). $\star$~: famille retenue.}
+\label{tab:ms_ea_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & MAE & RMSE & $R^2$ & $n_{\mathrm{par}}$ & AIC \\
+ & (kJ/mol) & (kJ/mol) & & & \\
+\midrule
+Puissance & 1.9 & 2.6 & 1.000 & 10 & 2616 \\
+Padé[2/1]-Born & 1.9 & 2.7 & 1.000 & 13 & 2639 \\
+Padé[1/1]-Born\,$\star$ & 1.9 & 2.7 & 1.000 & 10 & 2669 \\
+Linéaire-Born & 2.2 & 3.0 & 0.999 & 7 & 2954 \\
+Exp.\ saturante & 2.3 & 3.1 & 0.999 & 10 & 3023 \\
+Sigmoïde & 2.8 & 4.0 & 0.999 & 13 & 3719 \\
+Tanh & 2.8 & 4.2 & 0.999 & 13 & 3865 \\
+Onsager-linéaire & 4.2 & 6.0 & 0.998 & 7 & 4794 \\
+Logarithme & 9.3 & 15.1 & 0.985 & 7 & 7270 \\
+Constante & 22.3 & 33.6 & 0.925 & 4 & 9398 \\
+\bottomrule
+\end{tabular}
+\end{table}

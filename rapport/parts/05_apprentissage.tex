@@ -1,270 +1,258 @@
 %=============================================================================
-\section{Apprentissage automatique pour la prédiction de $\Delta G^\circ$}
+\section{Apprentissage automatique}
 \label{sec:ml}
 %=============================================================================
 
-Les sections~\ref{sec:analyse} et~\ref{sec:generalisation} ont développé des modèles paramétriques --- régressions linéaires puis approximants de Padé --- fondés sur des descripteurs physiques soigneusement sélectionnés (orbitales de Koopmans, LVC2, dureté $\eta$, potentiel chimique $\mu$). Cette section présente une approche complémentaire, fondée sur des modèles d'apprentissage automatique entraînés directement à partir de représentations moléculaires plus brutes. Deux familles ont été explorées :
-\begin{itemize}[noitemsep]
-    \item l'\textbf{apprentissage classique} sur descripteurs tabulaires (forêts aléatoires, gradient boosting, machines à vecteurs de support), qui s'appuie sur une vectorisation \textit{a priori} de chaque conformère ;
-    \item les \textbf{réseaux de neurones de graphes géométriques} (SchNet, DimeNet, GemNet, MACE), qui traitent directement la structure 3D du conformère sans passer par un jeu fixe de descripteurs.
-\end{itemize}
+La partie précédente a développé un modèle ancré dans la DFT conceptuelle~: cinq à sept descripteurs CDFT, assemblés dans une forme paramétrique motivée par la physique, conduisent à $\Delta G^\circ$ prédit avec une MAE de \SI{3.59}{kJ/mol} en réduction et \SI{3.84}{kJ/mol} en oxydation sur les dix solvants. Cette performance, à peine au-dessus de la précision intrinsèque de la DFT elle-même, soulève une question naturelle~: un modèle d'apprentissage automatique, libre de toute hypothèse physique, peut-il faire au moins aussi bien ? Et si oui, comment~? Cette partie tente d'y répondre en confrontant deux familles complémentaires, l'apprentissage classique sur descripteurs tabulaires et les réseaux de neurones de graphes équivariants, à exactement le même jeu de 1336~conformères que la partie~\ref{sec:analyse}.
 
-L'objectif n'est pas de remplacer le modèle physique --- dont l'interprétabilité et la parcimonie restent des atouts majeurs --- mais de tester si des modèles non linéaires de plus en plus expressifs peuvent réduire l'erreur résiduelle, en particulier sur les termes vibroniques ($E_\text{relax}$, $T\Delta S$) mal prédits par les approximants de Padé. Chaque famille est d'abord présentée dans son principe, puis confrontée aux mêmes cibles (EA, IP, $E_\text{relax}^\text{red/ox}$, $\Delta\Delta U^\text{red/ox}$, $T\Delta S^\text{red/ox}$, $\Delta G^\text{red/ox}$) et au même jeu de données multi-solvant.
+\subsection{Motivation et cadre}
+\label{sec:ml_motivation}
 
-\subsection{Apprentissage classique sur descripteurs tabulaires}
-\label{subsec:ml_classique}
+L'attrait de l'apprentissage automatique est immédiat. Une boîte noire entraînée sur le bon jeu de données pourrait, en principe, capter des corrélations non linéaires que la forme paramétrique précédente aurait manquées, et abaisser encore la MAE résiduelle. Le risque l'est tout autant~: sans précaution, on mesure simplement la richesse du balayage d'hyperparamètres sur le fold de test, et l'on rapporte un chiffre qui ne tiendrait pas hors du jeu d'entraînement.
 
-Les méthodes d'apprentissage classique constituent la première ligne de référence. Elles traitent chaque conformère comme un vecteur de caractéristiques de dimension fixe, construit à partir des grandeurs extraites des fichiers de sortie DFT. Ne requérant ni GPU ni connaissance explicite de la structure moléculaire 3D, elles servent de garde-fou pour quantifier le gain réel qu'apporteraient les modèles géométriques plus coûteux de la section~\ref{subsec:ml_gnn}.
+Nous avons donc construit la comparaison autour de trois principes. D'abord, une donnée commune~: chaque méthode consomme exactement les mêmes 1336~conformères que la partie~\ref{sec:analyse}, avec les mêmes cibles (EA, IP, $E_\text{relax}^\text{red/ox}$, $\Delta\Delta U^\text{red/ox}$, $T\Delta S^\text{red/ox}$, $\Delta G^\text{red/ox}$) exprimées en kJ/mol. Ensuite, des plis identiques~: les cinq plis externes de validation croisée groupée par molécule sont partagés entre la partie~\ref{sec:analyse}, le ML classique et les GNN, ce qui rend toute différence de MAE attribuable au seul modèle. Enfin, aucune optimisation d'hyperparamètres sur le fold de test~: pour les modèles classiques, le balayage est effectué sur trois plis internes additionnels, prélevés sur les molécules d'entraînement uniquement, de sorte que les hyperparamètres ne voient jamais le fold sur lequel on rapportera la MAE.
 
-\paragraph{Descripteurs.}
-Un vecteur de 51~descripteurs est construit par conformère. Il agrège :
-\begin{itemize}[noitemsep]
-    \item \textbf{descripteurs globaux} : énergies orbitalaires $\varepsilon_\text{HOMO}$, $\varepsilon_\text{LUMO}$, gap, norme du moment dipolaire, composition atomique (comptes par élément), fractions d'oxygène et d'azote, électronégativité moyenne et écart-type ;
-    \item \textbf{descripteurs agrégés par atome} : statistiques (moyenne, écart-type, min, max, étendue) des charges Hirshfeld, Mulliken et Voronoi, de la densité électronique et du potentiel électrostatique aux noyaux ;
-    \item \textbf{descripteurs géométriques} : rayon de giration, extension maximale, statistiques des distances entre atomes lourds ;
-    \item \textbf{descripteurs de solvant} : constante diélectrique $\varepsilon_r$ ;
-    \item \textbf{descripteurs vibroniques} : $E_\text{relax}^\text{LVC2}$ (réduction et oxydation) issus du pipeline predict-dg.
-\end{itemize}
-Le vecteur complet est standardisé (z-score) sur le jeu d'entraînement uniquement.
+Le plan suit la complexité croissante des familles. Le ML classique sur descripteurs tabulaires sert de garde-fou~: si XGBoost armé de descripteurs riches ne bat pas la formule physique, c'est un signal fort. Les réseaux de neurones de graphes équivariants viennent ensuite~: ils traitent la géométrie 3D atom par atome et constituent l'état de l'art pour les propriétés atomistiques (énergies, forces), mais leur transposition à une grandeur thermodynamique molaire comme $\Delta G^\circ$ n'a rien d'évident.
 
-\paragraph{Modèles testés.}
-Trois algorithmes couvrant les principaux paradigmes de l'apprentissage tabulaire ont été évalués :
-\begin{itemize}[noitemsep]
-    \item \textbf{Random Forest (RF)}~\cite{breiman2001rf} : ensemble d'arbres de décision construits par bagging et tirage aléatoire des descripteurs à chaque scission. Robuste au sur-apprentissage, multi-sortie natif, il fournit une mesure d'importance des descripteurs utilisable pour valider \textit{a posteriori} les choix de la section~\ref{sec:generalisation}.
-    \item \textbf{Gradient Boosting (GB)}~\cite{friedman2001gb} : ensemble d'arbres construits séquentiellement, chaque nouvel arbre corrigeant les résidus du modèle accumulé. L'implémentation retenue est XGBoost, exécutée sur GPU (CUDA, via l'API \texttt{device=cuda} de XGBoost~$\geq$~2.0) pour bénéficier de la vectorisation des évaluations de candidats de découpe.
-    \item \textbf{Support Vector Regression (SVR)}~\cite{smola2004svr} : régression à noyau, qui projette implicitement les descripteurs dans un espace de grande dimension et recherche une fonction $\varepsilon$-tolérante aux écarts. Le noyau (RBF, linéaire, polynomial) est traité comme un hyperparamètre à régler.
-\end{itemize}
+\subsection{Un jeu de données partagé}
+\label{sec:ml_protocole}
 
-\paragraph{Jeu de données.}
-Les douze cibles ($\text{EA}$, $\text{IP}$, $E_\text{relax}^\text{red/ox}$, $\Delta\Delta U^\text{red/ox}$, $T\Delta S^\text{red/ox}$, résidus, $\Delta G^\text{red/ox}$) sont extraites des champs \texttt{derived} du dataset PlamsV5 (workflow DFT complet). Les descripteurs LVC2 proviennent du workflow predict-dg. Après exclusion des conformères dont la décomposition DFT n'a pas convergé (DEA halogénés non stabilisés et états ioniques manquants), le jeu contient \textbf{1682~conformères} couvrant \textbf{73~molécules distinctes} dans 10~solvants, en accord strict avec la liste source (\texttt{input.txt}). Contrairement à la section~\ref{sec:s4_general} qui filtre également les conformères à EA verticale négative ($n=1411$), les baselines ML voient l'ensemble du jeu sans cette restriction : les modèles sont laissés libres d'apprendre la transition vers les régimes EA<0 (essentiellement dans l'hexane).
+Le tableau d'entrée rassemble, pour chacun des 1336~conformères, la cible thermodynamique et deux types possibles de descripteurs.
 
-\paragraph{Stratégie d'évaluation.}
-Une validation croisée 5-fold \textit{mol-aware} (\texttt{GroupKFold} sur le nom de molécule) est appliquée, strictement identique au protocole utilisé pour les GNN, afin de garantir l'absence de fuite inter-solvant. Les hyperparamètres sont optimisés par Optuna (\texttt{TPESampler} multivarié + \texttt{MedianPruner}) avec 80~essais pour RF, 150 pour XGBoost et 80 pour SVR. Chaque essai est évalué sur les cinq plis \textit{mol-aware} ; les essais clairement dominés sont élagués dès le premier pli. Optuna est préféré à une recherche sur grille car la plupart des hyperparamètres sont continus (\texttt{learning\_rate}, \texttt{C}, \texttt{reg\_alpha}, \ldots) et TPE atteint des valeurs comparables en $\sim$100~essais là où une grille exhaustive en demanderait plusieurs milliers. Les métriques rapportées sont la MAE, la RMSE et le $R^2$ out-of-fold, exprimés en kJ/mol.
+\paragraph{Piste CDFT.}
+La première piste reprend les descripteurs retenus dans la partie~\ref{sec:analyse}~: $\mu$, $\eta$, le pouvoir électro-accepteur $\omega^+$ pour la réduction, son symétrique $1/\omega^-$ pour l'oxydation, les indices de Fukui $f^2_\text{max}/f^2_\text{min}$, et le couplage vibronique LVC (quand le Hessien neutre est disponible). La constante diélectrique $\varepsilon_r$ du solvant est systématiquement adjointe~; sans elle, EA et IP s'effondrent comme on l'a vu au §\ref{sec:multisolvant}. Cette piste teste une question précise~: à descripteurs strictement équivalents, un modèle plus expressif que la forme paramétrique fait-il mieux~?
+
+\paragraph{Piste holistique.}
+La seconde piste vectorise toute l'information disponible dans le mode \texttt{predict-dg}, sans sélection préalable. Le vecteur agrège, pour chaque conformère~: les moments statistiques (moyenne, écart-type, minimum, maximum) des charges Hirshfeld, Mulliken, Voronoi et MDC par atome, de la densité électronique et du potentiel électrostatique aux noyaux, des amplitudes vibratoires et des gradients atomiques~; les énergies orbitalaires $\varepsilon_\text{HOMO}$ et $\varepsilon_\text{LUMO}$, le gap, la norme du moment dipolaire, l'électronégativité $\chi$, la dureté $\eta$ et l'électrophilicité $\omega$~; et la constante diélectrique du solvant. Selon que l'on prend le seul état neutre ou les trois états (neutre, anion vertical, cation vertical), le vecteur compte entre 90 et 240 entrées. La piste holistique pose une question complémentaire~: la richesse informationnelle, à elle seule, suffit-elle à battre la formule physique~?
+
+\paragraph{Deux modes de cible.}
+En mode direct, le modèle apprend les deux cibles $\Delta G^\text{red}$ et $\Delta G^\text{ox}$ indépendamment. En mode décomposition, il apprend les huit composantes thermodynamiques séparément, puis $\Delta G$ est reconstruit par somme via les équations~\ref{eq:decomposition_red} et~\ref{eq:decomposition_ox}. L'intuition naïve voudrait que décomposer en grandeurs physiques plus simples aide le modèle~; nous verrons qu'il en va autrement.
+
+\subsection{Apprentissage classique~: RF, XGBoost, SVR}
+\label{sec:ml_classique}
+
+Trois algorithmes complémentaires sont testés. Les forêts aléatoires (RF) construisent un ensemble d'arbres décorrélés par bagging et échantillonnage de variables~: robustes au bruit, peu performantes sur les extrapolations. Le gradient boosting (XGBoost) ajuste les arbres séquentiellement pour corriger les erreurs résiduelles du précédent~: plus fin, mais sensible au surapprentissage. Les machines à vecteurs de support (SVR) cherchent une hypersurface non linéaire via un noyau gaussien~: bonnes en haute dimension, mais d'un coût quadratique à cubique en nombre d'échantillons.
+
+\paragraph{La grille en bref.}
+Le balayage couvre $3 \times 2 \times 2 \times 2 = 24$~cellules~: trois algorithmes, deux pistes de descripteurs, deux niveaux de prédiction (1-SP ou 3-SP), deux modes de cible (direct ou décomposition). Chaque cellule est entraînée avec une validation croisée imbriquée~: les hyperparamètres sont fixés par un optimiseur bayésien sur les trois plis internes, puis le modèle final est évalué sur le cinquième pli externe, jamais vu pendant le réglage.
+
+\paragraph{Résultats sur la grille complète.}
+Le tableau~\ref{tab:ml_classique_grille} rapporte les MAE out-of-fold sur $\Delta G^\text{red}$ et $\Delta G^\text{ox}$ pour les vingt cellules ayant convergé dans le temps imparti. Les quatre cellules SVR-holistique n'y figurent pas~: le coût quadratique du noyau gaussien, multiplié par 240 features et huit cibles, dépasse le budget de calcul que nous nous étions fixé. Cette absence n'est pas bloquante pour le récit~: les variantes SVR sur la piste CDFT, qui plafonnent à \SI{10}{kJ/mol} de MAE, suffisent à conclure que SVR n'est pas compétitif sur ce jeu.
+
+\begin{table}[H]
+\centering
+\caption{Grille de 20~cellules d'apprentissage classique. MAE out-of-fold de $\Delta G^\text{red}$ et $\Delta G^\text{ox}$ (kJ/mol) sur 1336~conformères, validation croisée imbriquée à 5 plis externes groupée par molécule. La piste CDFT utilise 5 à 9 descripteurs (selon le tier 3-SP/1-SP), la piste holistique 90 à 240. Le mode direct apprend $\Delta G$ directement, le mode décomposition apprend les huit composantes thermodynamiques et somme.}
+\label{tab:ml_classique_grille}
+\footnotesize
+\begin{tabular}{l l c c c c}
+\toprule
+\textbf{Modèle} & \textbf{Piste} & \textbf{Tier} & \textbf{Mode} & \textbf{MAE $\Delta G^\text{red}$} & \textbf{MAE $\Delta G^\text{ox}$} \\
+\midrule
+RF  & CDFT       & 3-SP & direct      & 6.03 & 6.91 \\
+RF  & CDFT       & 3-SP & décompo.    & 6.67 & 8.25 \\
+RF  & CDFT       & 1-SP & direct      & 6.15 & 6.93 \\
+RF  & CDFT       & 1-SP & décompo.    & 7.48 & 8.18 \\
+RF  & holistique & 3-SP & direct      & 4.80 & 4.33 \\
+RF  & holistique & 3-SP & décompo.    & 5.10 & 4.85 \\
+RF  & holistique & 1-SP & direct      & 7.58 & 5.51 \\
+RF  & holistique & 1-SP & décompo.    & 8.83 & 7.15 \\
+XGB & CDFT       & 3-SP & direct      & 5.84 & 7.23 \\
+XGB & CDFT       & 3-SP & décompo.    & 7.18 & 8.13 \\
+XGB & CDFT       & 1-SP & direct      & 5.90 & 7.24 \\
+XGB & CDFT       & 1-SP & décompo.    & 8.20 & 8.67 \\
+\textbf{XGB} & \textbf{holistique} & \textbf{3-SP} & \textbf{direct} & \textbf{4.52} & \textbf{4.10} \\
+XGB & holistique & 3-SP & décompo.    & 5.13 & 4.70 \\
+XGB & holistique & 1-SP & direct      & 7.73 & 4.99 \\
+XGB & holistique & 1-SP & décompo.    & 8.25 & 5.76 \\
+SVR & CDFT       & 3-SP & direct      & 10.81 & 10.37 \\
+SVR & CDFT       & 3-SP & décompo.    & 11.40 & 10.75 \\
+SVR & CDFT       & 1-SP & direct      &  9.94 &  9.48 \\
+SVR & CDFT       & 1-SP & décompo.    & 11.05 & 10.57 \\
+SVR & holistique & --   & --          & \multicolumn{2}{c}{non convergée dans le budget de calcul} \\
+\midrule
+\multicolumn{4}{l}{\emph{Référence partie~\ref{sec:analyse} (dix solvants)}} & 3.59 & 3.84 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Le meilleur modèle classique.}
+La cellule gagnante est XGBoost sur la piste holistique 3-SP en mode direct, à \SI{4.52}{kJ/mol} de MAE en réduction et \SI{4.10}{kJ/mol} en oxydation. La figure~\ref{fig:parity_xgb_best} montre le \emph{parity plot} sur les 1336~conformères out-of-fold. Le nuage est compact, légèrement biaisé en oxydation (pente $0.978$, ordonnée d'environ $+13$), quasi parfaitement aligné en réduction (pente $0.993$, ordonnée $-2.0$). Le $R^2$ atteint $0.987$ et $0.997$ respectivement~: XGBoost capte la tendance globale, mais conserve une dispersion résiduelle d'environ \SI{4}{kJ/mol}, un kilojoule de plus que la formule physique.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering\includegraphics[width=\textwidth]{parity_xgb_ox.png}
+\caption{Oxydation.}\label{fig:parity_xgb_ox}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering\includegraphics[width=\textwidth]{parity_xgb_red.png}
+\caption{Réduction.}\label{fig:parity_xgb_red}
+\end{subfigure}\\[4pt]
+\includegraphics[width=0.92\textwidth]{solvent_legend.png}
+\caption{Parity plot du meilleur modèle classique (XGBoost, piste holistique 3-SP direct) sur les 1336~conformères out-of-fold de la validation croisée imbriquée. Points coloriés par solvant (violet = apolaire, jaune = polaire)~; diagonale $y = x$ en pointillés, droite de régression et bande de confiance à 95~\% en trait plein.}
+\label{fig:parity_xgb_best}
+\end{figure}
+
+\paragraph{Patterns systématiques.}
+Trois observations ressortent du tableau~\ref{tab:ml_classique_grille}. D'abord, sur la piste CDFT seule, tous les classiques restent au-dessus de \SI{5.8}{kJ/mol}~: à descripteurs identiques, la formule physique de la partie~\ref{sec:analyse} fait mieux que tous les ML testés. Cela tient probablement au fait que la formule paramétrique encode des relations multiplicatives ($\Delta G \propto \omega \times (1 + a f^2)$) que les arbres approximent maladroitement et que le noyau de SVR doit reconstruire de façon imparfaite.
+
+Ensuite, le mode direct bat systématiquement la décomposition de \SI{0.3}{} à \SI{1.5}{kJ/mol}. L'interprétation tient à une simple analogie~: pour un enfant qui joue au volley, prédire la trajectoire parabolique d'une balle est immédiat, là où en passer par les équations de la pesanteur, de la traînée et de la mécanique des fluides serait une tâche autrement plus ardue. C'est la même chose pour un modèle peu expressif~: il lui est plus facile d'apprendre directement la grandeur d'arrivée que d'apprendre séparément quatre composantes thermodynamiques, dont chacune répond à une physique différente, pour ensuite les recombiner. La décomposition est précieuse pour l'interprétation, mais elle ajoute des degrés de difficulté à l'apprentissage sans en réduire la cible utile.
+
+Enfin, le passage du 1-SP au 3-SP réduit l'erreur surtout pour $\Delta G^\text{red}$ (RF holistique~: $4.80$ contre $7.58$)~; pour $\Delta G^\text{ox}$, l'écart est plus modeste ($4.33$ contre $5.51$ chez RF, $4.10$ contre $4.99$ chez XGB). Les états ioniques verticaux apportent donc surtout de l'information sur la relaxation anionique~; pour le cation, la géométrie neutre seule suffit presque.
+
+\paragraph{Lecture d'ensemble.}
+Aucun modèle classique ne bat la formule physique de la partie~\ref{sec:analyse}, malgré un facteur trente sur le nombre de descripteurs (240 contre 7). Le meilleur, XGBoost en piste holistique 3-SP direct, reste à \SI{0.5}{kJ/mol} au-dessus en oxydation et à \SI{0.9}{kJ/mol} en réduction, soit environ vingt pour cent de MAE en plus. La marge est faible mais réelle, et le $R^2$ presque parfait indique une dispersion homogène plutôt qu'un biais systématique. C'est précisément cet écart qu'un modèle plus expressif disposant de la géométrie 3D devrait pouvoir combler.
+
+\subsection{Réseaux de neurones de graphes équivariants}
+\label{sec:ml_gnn}
+
+\paragraph{Pourquoi un GNN équivariant.}
+Les méthodes précédentes traitent chaque conformère comme un vecteur de descripteurs fixe, agrégeant la géométrie en quelques moments statistiques. Un réseau de neurones de graphes procède différemment~: il représente le conformère comme un graphe atomique, propage des messages entre atomes voisins, puis aggrège les états atomiques finaux en une prédiction par graphe. La propriété d'équivariance sous le groupe euclidien $E(3)$ garantit que la prédiction est invariante par translation et rotation rigide, et covariante par symétrie pour les quantités vectorielles. Cette propriété, fondamentale pour les potentiels atomistiques (forces, énergies), s'implémente différemment selon l'architecture.
+
+La famille des GNN équivariants pour la chimie a connu une évolution rapide en quelques années. SchNet\cite{schutt2017schnet} (2017) inaugure la propagation continue~: les filtres de message dépendent de la distance interatomique seule, sans information directionnelle. DimeNet\cite{klicpera2020dimenet} (2020) ajoute la directionnalité via des messages 3-corps qui tiennent compte de l'angle formé par les triplets d'atomes voisins, ce qui restaure la sensibilité aux dièdres. GemNet\cite{gasteiger2021gemnet} (2021) prolonge l'idée en incorporant les quadruplets d'atomes (messages 4-corps) et atteint l'état de l'art sur OC20. MACE\cite{batatia2022mace} (2022) opère un saut conceptuel en passant des embeddings directionnels aux tenseurs sphériques de l'espace $\mathrm{SO}(3)$~: les messages portent une information angulaire continue, et la non-linéarité s'exprime via la décomposition en harmoniques sphériques jusqu'à un ordre $\ell_\text{max}$. Aujourd'hui, les variantes MACE-OFF\cite{kovacs2023maceoff} dominent les classements sur les potentiels atomistiques.
+
+Pour cette étude, MACE est le candidat naturel~: il représente l'état de l'art le plus récent et le plus expressif de la lignée. Nous avons retenu DimeNet++ comme second GNN équivariant pour ne pas reposer sur une seule architecture~; précurseur direct de GemNet (mêmes auteurs, mêmes embeddings directionnels), il appartient à la même famille tout en étant suffisamment différent de MACE pour servir de garde-fou. SchNet et GemNet, mentionnés ci-dessus pour la généalogie, n'ont pas été entraînés~: SchNet est plus simple que DimeNet++, et son verdict serait redondant~; GemNet n'est plus aisément disponible dans les bibliothèques d'apprentissage de graphes courantes.
+
+\paragraph{Trois entraînements et leurs degrés de liberté.}
+Nous avons testé trois variantes pour isoler la contribution respective de l'architecture et des descripteurs d'entrée.
+
+MACE \emph{rich}~: l'architecture MACE complète (deux couches d'interaction, irreps cachés $32 \times 0e + 32 \times 1o$, corrélation 3, $\ell_\text{max} = 2$) reçoit, en plus de la géométrie et des numéros atomiques, treize scalaires par atome (charges Hirshfeld, Mulliken, Voronoi et MDC~; densité et potentiel électrostatique aux noyaux~; amplitudes vibratoires, gradient et Hessien diagonal~; $\varepsilon_r$, $\varepsilon_\text{HOMO}$, $\varepsilon_\text{LUMO}$, gap). C'est l'équivalent direct de la piste holistique du ML classique, augmentée de la géométrie 3D explicite.
+
+MACE \emph{minimal}~: même architecture, mais tous les scalaires par atome sont remis à zéro, à l'exception de la constante diélectrique du solvant. Le modèle ne dispose plus que de la géométrie, des numéros atomiques et de $\varepsilon_r$. Cette configuration teste si MACE peut apprendre $\Delta G$ depuis la seule structure 3D, sans aucun descripteur DFT par atome.
+
+DimeNet++~: architecture indépendante de la famille de Gasteiger (quatre blocs d'interaction, dimension cachée $128$, embeddings directionnels, messages 3-corps). Les descripteurs par atome ne s'y injectent pas aussi simplement que dans MACE~: nous gardons donc la configuration minimale (géométrie, numéros atomiques, $\varepsilon_r$ injecté au readout), pour une comparaison directe avec MACE minimal à information d'entrée égale.
+
+Les trois variantes sont entraînées sur 5000~époques par fold (taux d'apprentissage initial $10^{-3}$, décroissance cosinus, moyenne mobile exponentielle des poids), avec offsets par élément et normalisation des résidus standard. Chaque modèle requiert environ six à huit heures de calcul sur une A100.
 
 \paragraph{Résultats.}
-Le tableau~\ref{tab:s51_per_task} détaille la MAE par cible pour les trois modèles, et la figure~\ref{fig:s51_mae} en fournit la vue synoptique. XGBoost remporte la comparaison avec une MAE moyenne sur les composantes de \SI{9,9}{kJ/mol} et une MAE moyenne sur les deux énergies libres $\Delta G$ de \SI{9,9}{kJ/mol}, soit un gain de $\sim$19\% sur Random Forest (\SI{12,1}{kJ/mol} composantes, \SI{12,3}{kJ/mol} sur $\Delta G$) et d'un facteur 2,3 sur SVR (\SI{16,8}{kJ/mol} composantes, \SI{22,6}{kJ/mol} sur $\Delta G$). Sur la prédiction directe de $\Delta G_\text{ox}$, XGBoost atteint MAE~=~\SI{6,8}{kJ/mol} et $R^2 = 0{,}935$, niveau comparable au modèle physique combiné de la section~\ref{sec:generalisation} (MAE = \SI{6,0}{kJ/mol}).
+Le tableau~\ref{tab:gnn_results} et les figures~\ref{fig:parity_mace_rich}, \ref{fig:parity_mace_minimal} et~\ref{fig:parity_dimenet} rassemblent les MAE et $R^2$ out-of-fold des trois entraînements, sur la même partition de plis que le ML classique et la partie~\ref{sec:analyse}.
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
+\caption{Résultats out-of-fold des trois GNN équivariants sur les 1336~conformères, mêmes plis externes que le ML classique. La pente et l'ordonnée à l'origine sont celles de la régression linéaire de la prédiction sur la cible (la pente idéale est 1, l'ordonnée 0).}
+\label{tab:gnn_results}
 \footnotesize
-\caption{MAE par cible (kJ/mol) des trois baselines ML classiques (5-fold mol-aware, $n = 1682$, 73 molécules distinctes). La colonne \textit{Meilleur} indique le modèle vainqueur par cible ; $R^2$ reporté pour le meilleur modèle.}
-\label{tab:s51_per_task}
-\begin{tabular}{lcccccc}
+\begin{tabular}{l c c c c c c c c}
 \toprule
-Cible & RF & XGBoost & SVR & Meilleur & $R^2_\text{meilleur}$ \\
+ & \multicolumn{4}{c}{\textbf{Réduction $\Delta G^\text{red}$}} & \multicolumn{4}{c}{\textbf{Oxydation $\Delta G^\text{ox}$}} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}
+\textbf{Modèle} & MAE & $R^2$ & pente & ord. & MAE & $R^2$ & pente & ord. \\
 \midrule
-EA                            & 16,9  & \textbf{15,6} & 17,7 & XGBoost & 0,939 \\
-IP                            & 16,0  & \textbf{9,8}  & 18,1 & XGBoost & 0,945 \\
-$E_\text{relax}^\text{red}$   & 18,5  & \textbf{17,7} & 17,6 & SVR     & 0,314 \\
-$E_\text{relax}^\text{ox}$    & 13,7  & 10,0          & \textbf{7,4}  & SVR     & 0,770 \\
-$\Delta\Delta U_\text{red}$   & 15,1  & \textbf{14,3} & 27,4 & XGBoost & 0,957 \\
-$\Delta\Delta U_\text{ox}$    & 12,1  & \textbf{7,2}  & 18,8 & XGBoost & 0,922 \\
-$T\Delta S_\text{red}$        & 1,6   & \textbf{1,7}  & 2,1  & RF      & 0,480 \\
-$T\Delta S_\text{ox}$         & \textbf{1,8}   & 2,1  & 1,9  & RF      & 0,166 \\
-résidu red                    & 14,2  & \textbf{13,6} & 26,6 & XGBoost & 0,956 \\
-résidu ox                     & 11,1  & \textbf{6,7}  & 18,2 & XGBoost & 0,931 \\
-$\Delta G_\text{red}$         & 13,8  & \textbf{13,0} & 27,0 & XGBoost & 0,956 \\
-$\Delta G_\text{ox}$          & 10,8  & \textbf{6,8}  & 18,2 & XGBoost & 0,935 \\
+MACE \emph{rich}    & 23.34 & 0.903 & 0.89 & $-21$ & 14.94 & 0.773 & 0.83 & $+102$ \\
+MACE \emph{minimal} & 34.21 & 0.818 & 0.79 & $-47$ & 16.07 & 0.800 & 0.80 & $+119$ \\
+DimeNet++           & 36.29 & 0.807 & 0.86 & $-36$ & 19.02 & 0.761 & 0.92 & $+50$  \\
 \midrule
-MAE moyenne (12~cibles)        & 12,1  & \textbf{9,9}  & 16,8 & XGBoost & --- \\
-MAE moyenne $\Delta G$         & 12,3  & \textbf{9,9}  & 22,6 & XGBoost & --- \\
-$R^2$ moyen (12~cibles)        & 0,726 & \textbf{0,741} & 0,659 & XGBoost & --- \\
+\emph{Réf.}~XGB best                  & 4.52 & 0.997 & 0.99 & $-2$  & 4.10 & 0.987 & 0.98 & $+13$ \\
+\emph{Réf.}~partie~\ref{sec:analyse}  & 3.59 & --    & --   & --    & 3.84 & --    & --   & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{s51_mae_per_task.png}
-\caption{MAE par cible (kJ/mol) pour les trois baselines classiques ($n = 1682$, 73 molécules). XGBoost domine sur les cibles structurantes (EA, IP, $\Delta\Delta U$, $\Delta G_\text{red}$, $\Delta G_\text{ox}$, résidus) ; SVR domine sur les $E_\text{relax}$ grâce au LVC2 injecté en descripteur ; Random Forest reste compétitif sur $T\Delta S$.}
-\label{fig:s51_mae}
+\begin{subfigure}[t]{0.48\textwidth}
+\centering\includegraphics[width=\textwidth]{parity_mace_rich_ox.png}
+\caption{Oxydation.}\label{fig:parity_mace_rich_ox}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering\includegraphics[width=\textwidth]{parity_mace_rich_red.png}
+\caption{Réduction.}\label{fig:parity_mace_rich_red}
+\end{subfigure}\\[4pt]
+\includegraphics[width=0.92\textwidth]{solvent_legend.png}
+\caption{Parity plot de MACE \emph{rich} (treize scalaires DFT par atome en plus de la géométrie) sur les 1336~conformères out-of-fold, mêmes plis externes que le ML classique. Points coloriés par solvant~; diagonale $y = x$ en pointillés, droite de régression et bande de confiance à 95~\% en trait plein.}
+\label{fig:parity_mace_rich}
 \end{figure}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth]{s51_parity_dG_gb.png}
-\caption{Parité out-of-fold pour $\Delta G_\text{red}$ (gauche, $R^2 = 0{,}956$) et $\Delta G_\text{ox}$ (droite, $R^2 = 0{,}935$) du meilleur modèle classique, XGBoost, sur 1682 conformères (5 folds mol-aware agrégés).}
-\label{fig:s51_parity_gb}
+\begin{subfigure}[t]{0.48\textwidth}
+\centering\includegraphics[width=\textwidth]{parity_mace_minimal_ox.png}
+\caption{Oxydation.}\label{fig:parity_mace_minimal_ox}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering\includegraphics[width=\textwidth]{parity_mace_minimal_red.png}
+\caption{Réduction.}\label{fig:parity_mace_minimal_red}
+\end{subfigure}\\[4pt]
+\includegraphics[width=0.92\textwidth]{solvent_legend.png}
+\caption{Parity plot de MACE \emph{minimal} (géométrie, $Z$ et $\varepsilon_r$ seuls) sur les 1336~conformères out-of-fold.}
+\label{fig:parity_mace_minimal}
 \end{figure}
 
-\paragraph{Hyperparamètres retenus.}
-Le tableau~\ref{tab:s51_hparams} récapitule les meilleurs hyperparamètres sélectionnés par Optuna. La configuration retenue de \textbf{SVR est linéaire} (\texttt{kernel = linear}, $C = 53{,}1$, $\varepsilon = 0{,}007$), alors que les noyaux RBF et polynomial étaient dans l'espace de recherche. Cela indique qu'une fois les descripteurs DFT standardisés, la relation entre ces descripteurs et les cibles est essentiellement linéaire ; la non-linéarité restante est mieux capturée par la partition récursive des modèles à arbres que par un noyau RBF global. Pour \textbf{XGBoost}, la configuration sélectionnée est profondément régularisée : profondeur faible ($\text{max\_depth} = 4$), taux d'apprentissage bas ($\eta = 2{,}3\cdot 10^{-2}$), 1300~arbres. Ce régime « petits pas, petits arbres » maximise le biais local au profit de la variance, choix cohérent avec la taille modeste du jeu ($\sim$1700 observations).
-
-\begin{table}[htbp]
+\begin{figure}[H]
 \centering
+\begin{subfigure}[t]{0.48\textwidth}
+\centering\includegraphics[width=\textwidth]{parity_dimenet_ox.png}
+\caption{Oxydation.}\label{fig:parity_dimenet_ox}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering\includegraphics[width=\textwidth]{parity_dimenet_red.png}
+\caption{Réduction.}\label{fig:parity_dimenet_red}
+\end{subfigure}\\[4pt]
+\includegraphics[width=0.92\textwidth]{solvent_legend.png}
+\caption{Parity plot de DimeNet++ (géométrie, $Z$ et $\varepsilon_r$ injecté au readout) sur les 1336~conformères out-of-fold.}
+\label{fig:parity_dimenet}
+\end{figure}
+
+Les MAE sont de quatre à neuf fois plus élevées que celles de XGBoost. Dans l'ordre~: MACE rich (\SI{19.1}{kJ/mol} en moyenne ox+red), MACE minimal (\SI{25.1}{kJ/mol}) et DimeNet++ (\SI{27.7}{kJ/mol}). La hiérarchie interne aux GNN suit l'intuition~: ajouter les scalaires DFT par atome aide MACE de \SI{6}{kJ/mol} en moyenne, et MACE est plus expressif que DimeNet++ d'environ \SI{2.5}{kJ/mol} à information d'entrée égale.
+
+\paragraph{Une asymétrie ox/red instructive.}
+L'écart entre MACE rich et MACE minimal mérite un examen plus fin. En oxydation, le retrait des scalaires DFT ne coûte que \SI{1.1}{kJ/mol} ($14.94$ contre $16.07$)~; en réduction, le coût est de \SI{10.9}{kJ/mol} ($23.34$ contre $34.21$). Autrement dit, le réseau se passe presque des charges Mulliken et Hirshfeld pour prédire $\Delta G^\text{ox}$, mais s'en sert massivement pour $\Delta G^\text{red}$.
+
+Une lecture chimique simple explique ce déséquilibre. La géométrie de l'anion, que MACE minimal doit deviner depuis la seule géométrie neutre, dépend fortement de \emph{où} l'électron supplémentaire vient se loger~: sur un cycle aromatique, sur un substituant, sur un hétéroatome donneur. Les charges Hirshfeld et Mulliken par atome donnent à MACE rich un signal localisé qui guide l'anticipation de cette redistribution électronique. Pour le cation, la géométrie est plus rigide~: l'électron retiré vient le plus souvent de l'orbitale frontière la plus haute, sans réarrangement marqué. La géométrie neutre seule suffit alors presque.
+
+\paragraph{La calibration~: une régression vers la moyenne.}
+Tous les GNN partagent un défaut systématique de calibration~: la pente de régression de la prédiction sur la cible vaut $0.79$ à $0.92$, et l'ordonnée à l'origine s'écarte de zéro de plusieurs dizaines à plus de cent kJ/mol. Visuellement, les nuages glissent sous la diagonale pour les fortes valeurs de $|\Delta G|$, au-dessus pour les faibles. C'est la signature classique d'une régression vers la moyenne~: faute de données suffisantes pour soutenir des prédictions extrêmes, le modèle ramène toutes ses sorties vers le centre du jeu d'entraînement. Le XGBoost de la figure~\ref{fig:parity_xgb_best}, lui, ne présente pas ce défaut (pente $0.99$, ordonnée à un kilojoule), et la formule physique non plus~: tous deux sont assez parcimonieux pour ne pas surajuster, et assez bien calibrés pour ne pas écraser les extrêmes.
+
+Une seconde signature visuelle apparaît sur les parity plots des GNN~: les clusters par solvant sont nettement détachés (DMSO et hexane en particulier). Les modèles voient $\varepsilon_r$ comme entrée mais ne s'en servent pas finement~: ils encodent un décalage par solvant plutôt qu'une dépendance continue. La formule de Padé--Born (partie~\ref{sec:analyse}) et XGBoost, eux, modulent correctement la prédiction avec $\varepsilon_r$.
+
+\subsection{Discussion comparée}
+\label{sec:ml_discussion}
+
+\paragraph{La hiérarchie finale.}
+Le tableau~\ref{tab:hierarchie_finale} résume les performances des quatre approches sur la même grille de 1336~conformères et les mêmes cinq plis externes.
+
+\begin{table}[H]
+\centering
+\caption{Hiérarchie des approches sur le jeu de 1336~conformères en validation croisée à 5 plis externes groupée par molécule, mêmes plis pour toutes les méthodes.}
+\label{tab:hierarchie_finale}
 \footnotesize
-\caption{Meilleurs hyperparamètres (Optuna TPE, 5-fold mol-aware).}
-\label{tab:s51_hparams}
-\begin{tabular}{ll}
+\begin{tabular}{l c c c}
 \toprule
-Modèle & Hyperparamètres retenus \\
+\textbf{Approche} & \textbf{MAE $\Delta G^\text{red}$} & \textbf{MAE $\Delta G^\text{ox}$} & \textbf{Moyenne} \\
 \midrule
-Random Forest & \texttt{n\_estimators}=400, \texttt{max\_depth}=20, \texttt{max\_features}=0,70, \texttt{min\_samples\_leaf}=3, \\
-              & \texttt{min\_samples\_split}=5 \\
-XGBoost       & \texttt{n\_estimators}=1300, \texttt{max\_depth}=4, $\eta$=0,023, \texttt{subsample}=0,73, \\
-              & \texttt{colsample\_bytree}=1,00, \texttt{reg\_lambda}=2,14, \texttt{min\_child\_weight}=6,1 \\
-SVR           & \texttt{kernel}=linéaire, $C$=53,1, $\varepsilon$=0,007 \\
+Partie~\ref{sec:analyse} (formule CDFT)     & 3.59  & 3.84  & 3.72 \\
+XGBoost holistique 3-SP direct              & 4.52  & 4.10  & 4.31 \\
+MACE \emph{rich}                            & 23.34 & 14.94 & 19.14 \\
+MACE \emph{minimal}                         & 34.21 & 16.07 & 25.14 \\
+DimeNet++                                   & 36.29 & 19.02 & 27.66 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Discussion.}
-Trois observations structurent l'interprétation :
-\begin{itemize}[noitemsep]
-    \item \textbf{XGBoost s'approche du modèle physique sur $\Delta G$} : \SI{9,9}{kJ/mol} vs \SI{5,85}{kJ/mol} pour le Padé combiné. L'écart est imputable aux neuf molécules \textit{out-of-distribution} (DHI, IQ, NDGA) incluses dans les baselines et filtrées en amont du modèle physique, ainsi qu'à l'absence de contrainte Born--Haber dans le modèle ML. Le boosting bénéficie directement de l'injection de $E_\text{relax}^\text{LVC2}$ comme descripteur : il réduit la MAE sur $E_\text{relax}^\text{ox}$ à \SI{10,0}{kJ/mol} et permet au Random Forest d'atteindre une précision proche.
-    \item \textbf{SVR domine sur les termes de relaxation}, avec MAE = \SI{7,4}{kJ/mol} sur $E_\text{relax}^\text{ox}$ et \SI{17,6}{kJ/mol} sur $E_\text{relax}^\text{red}$, grâce à l'intégration quasi-directe du LVC2 que le noyau linéaire exploite sans déformation. En revanche, il s'effondre sur les termes plus non linéaires (résidus, $\Delta\Delta U_\text{red}$, $\Delta G$) où il ne capture pas la dépendance en solvant.
-    \item \textbf{Les termes entropiques restent réfractaires} pour les trois modèles : $R^2 \leq 0{,}48$ sur $T\Delta S_\text{red}$, $R^2 \leq 0{,}17$ sur $T\Delta S_\text{ox}$. Leur écart-type ($\sim$\SI{3}{kJ/mol}) est comparable au bruit d'entraînement, et les descripteurs globaux agrégés ne contiennent pas suffisamment d'information sur la distribution des fréquences vibrationnelles pour résoudre ce signal. Ce constat est cohérent avec celui du modèle physique (section~\ref{subsec:s4_tds}), où $T\Delta S$ sature autour de $R^2_\text{adj} \approx 0{,}45$ quel que soit le choix des descripteurs $\mu$, $\eta$.
-\end{itemize}
+La formule physique reste le meilleur prédicteur, à \SI{3.72}{kJ/mol} de MAE moyenne. XGBoost s'en approche à \SI{0.6}{kJ/mol} près. Les trois GNN équivariants, malgré leur expressivité supérieure et leur accès explicite à la géométrie 3D atom par atome, sont quatre à sept fois moins précis. L'ordre est stable sur les deux cibles séparément.
 
-\paragraph{Importance des descripteurs (RF).}
-L'analyse d'importance \texttt{feature\_importances\_} sur le Random Forest confirme les intuitions physiques : les cinq descripteurs les plus importants sont, dans l'ordre, $\varepsilon_\text{LUMO}$, $\varepsilon_\text{HOMO}$, $E_\text{relax}^\text{LVC2,ox}$, $E_\text{relax}^\text{LVC2,red}$, et la constante diélectrique du solvant $\varepsilon_r$. Les autres descripteurs agrégés (statistiques de charges, géométrie) contribuent individuellement pour moins de 3\% de l'importance totale. Cette hiérarchie valide \textit{a posteriori} le choix des descripteurs manuels de la section~\ref{sec:generalisation} et suggère qu'un modèle parcimonieux limité à ces cinq features pourrait capter l'essentiel du signal accessible.
+\paragraph{Pistes d'explication.}
+Trois lectures, non exclusives, peuvent rendre compte de cet écart entre les GNN et XGBoost.
 
-\paragraph{Conclusion intermédiaire.}
-Sans optimisation ionique DFT et avec un modèle entraîné en $\sim$3~heures sur un seul GPU A100, XGBoost atteint une précision globale de \SI{9,9}{kJ/mol} sur $\Delta G$, démontrant qu'un prédicteur tabulaire exploitant des descripteurs DFT soigneusement choisis constitue une baseline solide pour le criblage de molécules redox-actives. La comparaison avec les modèles géométriques, plus ambitieux, fait l'objet de la section suivante.
+La première tient probablement au biais inductif géométrique. L'équivariance $E(3)$, qui fait la force de MACE et DimeNet++, a été conçue pour des propriétés qui dépendent fortement de la géométrie 3D locale~: forces interatomiques, énergies de surfaces de potentiel, énergies vibratoires. C'est ce qui leur fait gagner les classements de potentiels atomistiques. Or $\Delta G^\circ_\text{redox}$ est une propriété globale d'origine plutôt orbitale~: elle paraît dépendre essentiellement de la position énergétique du HOMO et du LUMO, des charges agrégées sur le squelette $\pi$ et de l'écrantage diélectrique du solvant. La géométrie 3D y entrerait alors marginalement, et la capacité importante consacrée par le réseau à apprendre une équivariance fine pourrait n'avoir presque pas d'usage utile.
 
-\subsection{Réseaux de neurones de graphes géométriques}
-\label{subsec:ml_gnn}
+Une seconde hypothèse touche à l'asymétrie informationnelle entre les modèles. XGBoost reçoit 240~descripteurs qui sont, pour la plupart, des agrégations humaines~: moyenne, écart-type, minimum et maximum des charges Hirshfeld par atome, somme des amplitudes vibratoires, HOMO et LUMO molaires. Ce sont des descripteurs taillés pour la régression de propriétés molaires. MACE, lui, reçoit les charges Hirshfeld atome par atome~: il lui revient de les agréger correctement via le message-passing et le readout, et cet apprentissage demande des données. Sur 1336~graphes, il n'aurait peut-être pas assez d'exemples pour apprendre la \og{}moyenne d'une charge atomique\fg{} aussi efficacement que la moyenne arithmétique reçue gratuitement par XGBoost.
 
-Les modèles précédents reposent sur un choix \textit{a priori} de descripteurs. Les réseaux de neurones de graphes (GNN) géométriques suppriment cette étape : ils apprennent eux-mêmes une représentation vectorielle par atome à partir de la structure 3D du conformère, via un schéma de passage de messages (\textit{message passing}) sur le graphe des voisins géométriques. Cette section présente brièvement les quatre architectures successives qui jalonnent l'état de l'art --- SchNet, DimeNet, GemNet, MACE --- avant de détailler le modèle retenu pour notre cas d'application.
+Une troisième piste, plus structurelle, est le régime de petit jeu. Les comparaisons systématiques rapportées dans la littérature\cite{schutt2017schnet} et les benchmarks publics MoleculeNet suggèrent que les GNN ne battent les ensembles d'arbres armés de descripteurs sur les jeux moléculaires que pour des effectifs dépassant typiquement plusieurs milliers à dizaines de milliers de molécules. En deçà, ce sont les forêts aléatoires et le gradient boosting qui semblent dominer. Notre jeu, 68~molécules et 1336~conformères, se situe en dessous de ce seuil~; cela ne signifie pas que l'approche soit invalide, mais que le régime exploré n'est probablement pas celui qui avantage les GNN.
 
-\paragraph{Principe commun.}
-Un GNN géométrique construit pour chaque atome $i$ un plongement $h_i \in \mathbb{R}^d$, mis à jour itérativement par agrégation des messages reçus des voisins $j$ situés dans un rayon $r_c$ autour de $i$ :
-\begin{equation}
-    h_i^{(t+1)} = \phi\left( h_i^{(t)}, \sum_{j \in \mathcal{N}(i)} m(h_j^{(t)}, \mathbf{r}_{ij}) \right)
-    \label{eq:gnn_mp}
-\end{equation}
-où $\mathbf{r}_{ij} = \mathbf{r}_j - \mathbf{r}_i$ est le vecteur relatif et $m$ une fonction de message. Les architectures diffèrent par l'information géométrique injectée dans $m$ (distance seule, distance + angle, distance + angle + dièdre) et par la manière dont les symétries du groupe euclidien $E(3)$ sont respectées.
+\paragraph{Sur la forme des erreurs.}
+Un dernier point mérite d'être souligné. Au-delà des MAE absolues, la forme des erreurs diffère qualitativement entre les approches. La formule physique et XGBoost produisent des erreurs à peu près centrées sur zéro, avec une dispersion homogène~: la prédiction est bruitée mais non biaisée. Les GNN, au contraire, présentent une régression vers la moyenne nette (pentes $0.79$ à $0.92$) qui se traduit par une sous-estimation systématique des extrêmes. Sur un criblage industriel, cela signifie qu'un modèle GNN sous-estimerait la performance redox des molécules les plus prometteuses (haute oxydation, haute réduction)~: c'est précisément le mauvais type d'erreur, celui qui fait passer à côté des candidats intéressants.
 
-\subsubsection{Architectures historiques : SchNet, DimeNet, GemNet}
-\label{subsubsec:gnn_historiques}
+\paragraph{Quand un GNN serait-il préférable.}
+Le verdict de cette section n'est pas que les GNN équivariants soient inutiles pour la chimie, loin de là. Ils restent l'état de l'art pour les forces atomistiques, les énergies vibratoires (où la géométrie locale détermine tout), et les simulations de dynamique moléculaire pilotées par un potentiel appris, où chaque déplacement compte. Ils excellent également sur les jeux à très haute densité de données. Le contexte qui leur est défavorable est précisément celui de ce travail~: une propriété thermodynamique globale et un jeu de données restreint.
 
-Trois architectures successives jalonnent la montée en précision des GNN géométriques avant MACE. Chacune enrichit l'information géométrique injectée dans la fonction de message (\ref{eq:gnn_mp}), d'où une complexité croissante.
+\subsection{Limites et perspectives}
+\label{sec:ml_perspectives}
 
-\paragraph{SchNet~\cite{schutt2017schnet}.}
-Premier GNN géométrique largement diffusé. Le message ne dépend que de la distance $\|\mathbf{r}_{ij}\|$, développée sur une base de fonctions radiales gaussiennes, puis transformée par une \textit{continuous-filter convolution} (filtre à poids continus $\mathbf{W}(\|\mathbf{r}_{ij}\|)$). L'architecture est strictement invariante par rotation mais ignore toute information angulaire : deux géométries de même graphe de distances produisent des plongements identiques. SchNet fournit donc la référence minimale « apprendre depuis la géométrie 3D sans descripteurs chimiques ajoutés ».
+Cette étude n'épuise pas le sujet. Trois pistes méritent d'être mentionnées.
 
-\paragraph{DimeNet~\cite{klicpera2020dimenet}.}
-Extension de SchNet qui incorpore les angles $\theta_{ijk}$ entre triplets d'atomes $(i, j, k)$ via des fonctions de Bessel sphériques (\textit{directional message passing}). Le message ne transite plus seulement entre atomes mais entre arêtes orientées, ce qui permet de conditionner la propagation sur la direction locale. L'information angulaire rompt la dégénérescence des environnements isomorphes en distances et améliore significativement la prédiction des énergies et des forces sur les jeux QM9 / MD17.
+D'abord, un ordre de grandeur de plus en taille de jeu pourrait changer le verdict pour les GNN~: une cible plausible serait d'étendre la couverture à plusieurs centaines à un millier de molécules organiques redox, par exemple en agrégeant les bases ChemBL ou Reaxys filtrées par sous-classe chimique pertinente. Le ratio paramètres/exemples passerait alors sous le seuil critique, et un MACE rich entraîné sur dix mille conformères pourrait rivaliser avec XGBoost.
 
-\paragraph{GemNet~\cite{gasteiger2021gemnet}.}
-Ajoute aux distances et angles les \textit{dièdres} $\varphi_{ijkl}$, c'est-à-dire l'information de torsion à quatre corps, capturée via une couche \textit{quadruplet}. Le passage de messages est effectué sur le graphe des arêtes (plutôt que des nœuds), ce qui permet de propager naturellement les corrélations à longue portée sans empiler un grand nombre de couches. GemNet est l'une des architectures les plus précises de sa génération sur les benchmarks moléculaires (OC20, MD17), au prix d'un coût mémoire plus élevé et d'un temps d'entraînement significatif.
+Ensuite, le pré-entraînement change l'équation. Les variantes MACE-OFF\cite{kovacs2023maceoff} ont été entraînées sur des dizaines de millions de structures organiques avec des énergies de référence~: en partant de ces poids et en ajustant seulement la tête sur notre cible $\Delta G$, on éviterait l'apprentissage from-scratch des agrégations atomiques. Cette approche de transfert reste une voie naturelle à explorer dans une étude ultérieure.
 
-\paragraph{Limites communes.}
-Les trois architectures cumulent des \emph{invariants scalaires} de plus en plus riches (distances $\to$ distances + angles $\to$ distances + angles + dièdres). Cette construction par invariants souffre de deux faiblesses. Premièrement, elle manipule uniquement des grandeurs scalaires : des prédictions vectorielles (forces, dipôles) nécessitent des post-traitements \textit{ad hoc} (gradient autograd ou têtes dédiées). Deuxièmement, le nombre de termes à trois ou quatre corps explose combinatoirement, ce qui pénalise la scalabilité aux grands rayons de coupure. MACE propose une rupture conceptuelle en adoptant une représentation intrinsèquement équivariante, objet de la sous-section suivante.
-
-\subsubsection{RedoxMACE : MACE avec injection de descripteurs chimiques}
-\label{subsubsec:redoxmace}
-
-\paragraph{MACE~\cite{batatia2022mace}.}
-Rompt avec l'approche incrémentale précédente en adoptant une formulation en \textit{tenseurs moment équivariants} : au lieu de cumuler des invariants scalaires (distances, angles, dièdres), MACE construit directement des représentations irréductibles du groupe $O(3)$ de degré $\ell \leq \ell_\text{max}$, et les combine via des produits tensoriels paramétrés (coefficients de Clebsch--Gordan). L'architecture est intrinsèquement équivariante : les grandeurs scalaires (énergies) sont invariantes, les grandeurs vectorielles (forces, dipôles) se transforment correctement sous rotation. Elle atteint une précision élevée avec un nombre modeste de couches (souvent une seule), grâce à une corrélation à $\nu$ corps calculée en une seule passe via une expansion en moments atomiques. C'est cette combinaison expressivité / compacité qui a motivé son choix comme modèle principal pour notre tâche.
-
-Le modèle développé pour cette étude, appelé \textit{RedoxMACE}, adapte l'architecture MACE à la prédiction multi-tâches des douze composantes de la décomposition thermodynamique. Trois ajouts caractérisent cette variante.
-
-\paragraph{Backbone MACE.}
-Une couche d'interaction, représentations cachées $32 \times 0e + 32 \times 1o$ (32 canaux scalaires et 32 canaux vectoriels), troncation angulaire $\ell_\text{max} = 2$, corrélation à trois corps. Graphe moléculaire construit par rayon de coupure $r_c = \SI{5,0}{\angstrom}$. Taille totale du modèle volontairement modeste ($\sim 5\cdot 10^4$ paramètres) pour un jeu de données de $\sim$1700 échantillons.
-
-\paragraph{Injection de descripteurs DFT.}
-Le backbone est augmenté par trois blocs d'injection (figure~\ref{fig:mace_archi}) :
-\begin{itemize}[noitemsep]
-    \item \textbf{Scalaires atomiques} (13 par atome) : charges Hirshfeld / Mulliken / Voronoi, densité électronique et potentiel électrostatique aux noyaux, norme du mode normal dominant, trace du Hessien diagonal, constante diélectrique $\varepsilon$ (broadcast), $\varepsilon_\text{HOMO}$, $\varepsilon_\text{LUMO}$, gap, norme du moment dipolaire.
-    \item \textbf{Scalaires d'arête} (4 par liaison) : ordre de liaison, indicateur de covalence, appartenance à un cycle, caractère conjugué (perception RDKit).
-    \item \textbf{Descripteurs vectoriels optionnels} (mode normal dominant 3D) : injectés dans la sous-représentation $1o$ via une application linéaire e3nn équivariante.
-\end{itemize}
-
-\paragraph{Tête de lecture multi-tâches.}
-Après agrégation par pooling en somme, un MLP à deux couches de 256 unités cachées et activation SiLU produit douze sorties : EA, IP, $E_\text{relax}^\text{red/ox}$, $\Delta\Delta U^\text{red/ox}$, $T\Delta S^\text{red/ox}$, les deux résidus de la décomposition et les deux énergies libres directes $\Delta G^\text{red/ox}$. Une variante \textit{multi-head} (MLP séparés par groupe de tâches : électronique, structural, thermique, résidu, $\Delta G$) est également évaluée.
-
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[
-    node distance=0.45cm and 0.5cm,
-    every node/.style={font=\footnotesize},
-    input/.style={rectangle, rounded corners=2pt, draw=black!60, fill=blue!8,
-                   minimum width=2.4cm, minimum height=0.75cm, align=center,
-                   inner sep=3pt},
-    inject/.style={rectangle, draw=black!60, fill=orange!15, minimum width=2.4cm,
-                    minimum height=0.75cm, align=center, inner sep=3pt},
-    mace/.style={rectangle, draw=black!60, fill=green!10, minimum width=2.4cm,
-                  minimum height=0.85cm, align=center, inner sep=3pt},
-    head/.style={rectangle, draw=black!60, fill=red!8, minimum width=2.4cm,
-                  minimum height=0.75cm, align=center, inner sep=3pt},
-    outnode/.style={rectangle, rounded corners=2pt, draw=black!70, fill=yellow!20,
-                 minimum width=2.3cm, minimum height=0.6cm, align=center,
-                 inner sep=2pt, font=\scriptsize},
-    arr/.style={-{Latex[length=2mm]}, thick, black!70},
-    dashedarr/.style={-{Latex[length=2mm]}, thick, black!50, dashed},
-]
-
-\node[input] (geom) {Géométrie neutre\\($R_0 \in \mathbb{R}^{N\times 3}$)};
-\node[input, below=of geom] (node_s) {13 scalaires/atome\\(Hirshfeld, HOMO,...)};
-\node[input, below=of node_s] (edge_s) {4 scalaires/arête\\(liaison, cycle,...)};
-\node[input, below=of edge_s] (vec) {Mode normal 3D\\(optionnel, $1o$)};
-
-\node[mace, right=1.3cm of geom, yshift=-0.4cm] (radius) {Graphe de rayons\\$r_c = 5{,}0\,\mathrm{\AA}$};
-\node[inject, below=of radius] (embed_s) {MLP scalaires\\$\to 32\times 0e$};
-\node[inject, below=of embed_s] (embed_e) {MLP arêtes\\$\to$ attribut};
-\node[inject, below=of embed_e] (embed_v) {e3nn linéaire\\$\to 32\times 1o$};
-
-\node[mace, right=1.3cm of radius, yshift=-1.2cm,
-       minimum height=3.6cm, text width=2.8cm] (macelay)
-     {\textbf{MACE}\\[2pt]\footnotesize 1 couche\\$\ell_{\max}=2$\\corr.~3\\$\sim 5\!\cdot\!10^4$ param.};
-
-\node[mace, right=1.2cm of macelay, yshift=0.4cm] (pool) {Pooling somme\\(invariant)};
-\node[head, below=of pool] (mlp) {MLP 2 couches\\$256$ SiLU, drop 0,2};
-
-\node[outnode, right=0.9cm of mlp.east, yshift=1.5cm] (o1) {EA, IP};
-\node[outnode, below=0.08cm of o1] (o2) {$E_{\mathrm{relax}}^{\mathrm{red/ox}}$};
-\node[outnode, below=0.08cm of o2] (o3) {$\Delta\Delta U_{\mathrm{red/ox}}$};
-\node[outnode, below=0.08cm of o3] (o4) {$T\Delta S_{\mathrm{red/ox}}$};
-\node[outnode, below=0.08cm of o4] (o5) {résidus};
-\node[outnode, below=0.08cm of o5] (o6) {$\Delta G_{\mathrm{red/ox}}$};
-
-\draw[arr] (geom) -| (radius);
-\draw[arr] (node_s) -- (embed_s);
-\draw[arr] (edge_s) -- (embed_e);
-\draw[dashedarr] (vec) -- (embed_v);
-
-\draw[arr] (radius.east) -- ++(0.4,0) |- (macelay.west |- radius.east);
-\draw[arr] (embed_s.east) -- ++(0.4,0) |- (macelay.west);
-\draw[arr] (embed_e.east) -- ++(0.4,0) |- (macelay.west |- embed_e);
-\draw[dashedarr] (embed_v.east) -- ++(0.4,0) |- (macelay.west |- embed_v);
-
-\draw[arr] (macelay.east) -- (pool.west);
-\draw[arr] (pool) -- (mlp);
-
-\foreach \n in {o1, o2, o3, o4, o5, o6}
-    \draw[arr] (mlp.east) -- ++(0.3,0) |- (\n.west);
-
-\node[below=2.2cm of edge_s, xshift=3.0cm, font=\scriptsize\itshape, align=center]
-     {Perte multi-tâches : Huber pondéré + pénalité Born--Haber\\
-      $\mathcal{L} = \sum_t w_t\,\mathrm{Huber}(\hat y_t, y_t)
-       + \lambda_\text{thermo}\,(\mathcal{C}_\text{red} + \mathcal{C}_\text{ox})$};
-
-\end{tikzpicture}
-\caption{Architecture de RedoxMACE. Les blocs bleus représentent les entrées (géométrie + descripteurs DFT), les blocs orange les blocs d'injection (projection vers les représentations MACE), le bloc vert le backbone équivariant, et les blocs rouges/jaunes la tête de lecture multi-tâches. Les flèches pleines indiquent les flux activés dans la configuration optimale ; la flèche pointillée indique l'injection vectorielle optionnelle.}
-\label{fig:mace_archi}
-\end{figure}
-
-\paragraph{Baseline atomique et normalisation.}
-Une régression linéaire par numéro atomique $Z$, ajustée sur le jeu d'entraînement, est soustraite des cibles avant normalisation \textit{z}-score. Elle capture la contribution extensive (somme d'énergies de référence par atome) et laisse le réseau apprendre uniquement le résidu chimique.
-
-\paragraph{Fonction de perte multi-tâches.}
-\begin{equation}
-    \mathcal{L} = \sum_t w_t \cdot \text{Huber}(\hat y_t, y_t) + \lambda_\text{thermo} \left( \mathcal{C}_\text{red} + \mathcal{C}_\text{ox} \right)
-    \label{eq:mace_loss}
-\end{equation}
-où $\mathcal{C}_\text{red} = \mathbb{E}\big[(\hat{\Delta G}_\text{red} - [-\hat{\text{EA}} + \hat E_\text{relax}^\text{red} + \hat{\Delta\Delta U}_\text{red} - \hat{T\Delta S}_\text{red} + \hat r_\text{red}])^2\big]$ impose une cohérence Born--Haber douce entre la prédiction directe et la somme des composantes (idem pour $\mathcal{C}_\text{ox}$). Deux schémas de pondération $w_t$ sont comparés : pondération apprise par incertitude~\cite{kendall2018}, et pondération fixe (toutes les tâches au même poids en espace normalisé).
-
-\paragraph{Variantes testées.}
-Plusieurs configurations ont été entraînées dans le but d'isoler la contribution de chaque choix de conception :
-\begin{itemize}[noitemsep]
-    \item \textit{baseline sans descripteurs chimiques} (géométrie seule, évalue l'apport du backbone MACE pur) ;
-    \item \textit{RedoxMACE avec Koopmans} (13 scalaires atomiques réintégrés) ;
-    \item \textit{variante multi-head} vs tête partagée ;
-    \item \textit{pondération Kendall} vs pondération fixe ;
-    \item \textit{injection vectorielle} active ou non (mode normal dominant).
-\end{itemize}
-
-\paragraph{Stratégie d'évaluation.}
-Identique à celle des modèles classiques : validation croisée 5-fold \textit{mol-aware} sur le jeu de $\sim$1700 conformères (69 molécules, 10 solvants), seed fixé, métriques out-of-fold rapportées sur les douze cibles. L'entraînement utilise l'optimiseur AdamW, un schéma cosinus sur 5000 epochs et une régularisation \textit{noisy nodes}~\cite{godwin2022}.
-
+Enfin, l'hybridation physique + ML reste l'option la plus prometteuse à court terme. La marge de \SI{0.6}{kJ/mol} entre la formule physique ($3.72$) et XGBoost ($4.31$) suggère que la formule manque encore une petite fraction de la variance. Un modèle de résidu, c'est-à-dire un petit XGBoost ou un perceptron multicouche entraîné à prédire la différence entre la formule et la DFT, pourrait combler cette marge sans renoncer à l'interprétabilité de la partie~\ref{sec:analyse}. C'est la voie qui combine le mieux ce que chaque famille sait faire~: la formule pour la tendance générale, l'apprentissage pour ce qu'elle ne capte pas.

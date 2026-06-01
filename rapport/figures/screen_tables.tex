@@ -1,0 +1,49 @@
+\begin{table}[htbp]
+\centering\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{subtable}[t]{0.49\textwidth}
+\centering
+\caption{IP vertical (oxydation)}\label{tab:ms_ip_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & MAE & RMSE & $R^2$ & $n_{\mathrm{par}}$ & AIC \\
+ & {\tiny kJ/mol} & {\tiny kJ/mol} & & & \\
+\midrule
+Puissance & 3.1 & 5.5 & 0.991 & 10 & 4575 \\
+Padé[2/1]-Born & 3.1 & 5.5 & 0.991 & 13 & 4600 \\
+Padé[1/1]-Born\,$\star$ & 3.1 & 5.5 & 0.991 & 10 & 4594 \\
+Linéaire-Born & 3.2 & 5.7 & 0.991 & 7 & 4649 \\
+Exp.\ saturante & 3.6 & 6.1 & 0.990 & 10 & 4833 \\
+Sigmoïde & 3.9 & 6.5 & 0.988 & 13 & 5008 \\
+Onsager-linéaire & 5.1 & 7.9 & 0.982 & 7 & 5528 \\
+Tanh & 6.6 & 10.7 & 0.967 & 13 & 6367 \\
+Logarithme & 9.8 & 15.1 & 0.936 & 7 & 7260 \\
+Constante & 21.7 & 32.4 & 0.703 & 4 & 9301 \\
+\bottomrule
+\end{tabular}
+\end{subtable}
+\hfill
+\begin{subtable}[t]{0.49\textwidth}
+\centering
+\caption{EA verticale (réduction)}\label{tab:ms_ea_families}
+\begin{tabular}{lccccc}
+\toprule
+Famille & MAE & RMSE & $R^2$ & $n_{\mathrm{par}}$ & AIC \\
+ & {\tiny kJ/mol} & {\tiny kJ/mol} & & & \\
+\midrule
+Puissance & 1.9 & 2.6 & 1.000 & 10 & 2616 \\
+Padé[2/1]-Born & 1.9 & 2.7 & 1.000 & 13 & 2639 \\
+Padé[1/1]-Born\,$\star$ & 1.9 & 2.7 & 1.000 & 10 & 2669 \\
+Linéaire-Born & 2.2 & 3.0 & 0.999 & 7 & 2954 \\
+Exp.\ saturante & 2.3 & 3.1 & 0.999 & 10 & 3023 \\
+Sigmoïde & 2.8 & 4.0 & 0.999 & 13 & 3719 \\
+Tanh & 2.8 & 4.2 & 0.999 & 13 & 3865 \\
+Onsager-linéaire & 4.2 & 6.0 & 0.998 & 7 & 4794 \\
+Logarithme & 9.3 & 15.1 & 0.985 & 7 & 7270 \\
+Constante & 22.3 & 33.6 & 0.925 & 4 & 9398 \\
+\bottomrule
+\end{tabular}
+\end{subtable}
+\caption{Screen des 10 familles de correction de solvant pour l'IP et l'EA verticaux ($n = 1336$), classées par MAE croissante. $\star$~: famille retenue (Padé[1/1]-Born, physiquement motivée). MAE et RMSE en kJ/mol.}
+\label{tab:ms_families}
+\end{table}
