@@ -1,6 +1,8 @@
-# CLAUDE.md
+# ARCHITECTURE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Documentation technique du dépôt PlamsV5 : architecture des pipelines, conventions de code, paramètres et organisation des répertoires.
+
+> **Note de transparence.** Ce fichier est dérivé de `CLAUDE.md`, un guide initialement rédigé pour orienter l'assistant Claude Code (claude.ai/code) lors du développement du projet. Le contenu a été conservé tel quel parce qu'il constitue, indépendamment de son origine, une documentation technique complète du dépôt. `CLAUDE.md` reste maintenu en local par l'auteur pour le travail quotidien avec un assistant IA, mais c'est `ARCHITECTURE.md` qui sert de référence partagée à l'équipe.
 
 ## Overview
 
@@ -179,12 +181,12 @@ Arguments CLI :
 - `--temperature` : temperature pour Boltzmann (defaut: 298.15 K)
 - `--u-method` : methode de calcul de U (direct ou h_minus_rt)
 - `--analysis-only` + `--workdir` : analyser des calculs existants
-- `--predict-dg` : mode criblage rapide (3 SP+NormalModes au lieu de 7 calculs)
+- `--predict-dg` : mode criblage rapide (3 SP au lieu de 7 calculs ; NormalModes sur le neutre, gradient seul sur les ions)
 
 ### 2b. Mode Predict-DG (criblage rapide)
 
 ```bash
-# Mode predict-dg : 3 SP+NormalModes avec ConceptualDFT + QTAIM
+# Mode predict-dg : 3 SP (NormalModes neutre + gradients ioniques) avec ConceptualDFT + QTAIM
 ./redox_calc.py --predict-dg \
                 --input-dir <molecule>_workdir/conformers/results \
                 --name <molecule_name> \
@@ -196,17 +198,19 @@ Arguments CLI :
                 --workdir <molecule>_workdir --name <molecule_name>
 ```
 
-**Pipeline par conformere (3 calculs SP+NormalModes sur geom neutre) :**
+**Pipeline par conformere (3 SP sur geom neutre) :**
 
-| # | Calcul | Charge | Spin | Base | COSMO | Extras |
-|---|--------|--------|------|------|-------|--------|
-| 1 | neutral_sp | 0 | 0 | DZP | CONJ | ConceptualDFT + QTAIM |
-| 2 | reduced_sp | -1 | 1 | DZP | CONJ CORR | ConceptualDFT + QTAIM |
-| 3 | oxidized_sp | +1 | 1 | DZP | CONJ CORR | ConceptualDFT + QTAIM |
+| # | Calcul | Charge | Spin | Base | COSMO | Proprietes | Extras |
+|---|--------|--------|------|------|-------|------------|--------|
+| 1 | neutral_sp | 0 | 0 | DZP | CONJ | NormalModes (Hessien neutre) | ConceptualDFT + QTAIM |
+| 2 | reduced_sp | -1 | 1 | DZP | CONJ CORR | Gradient seul | ConceptualDFT + QTAIM |
+| 3 | oxidized_sp | +1 | 1 | DZP | CONJ CORR | Gradient seul | ConceptualDFT + QTAIM |
 
 Ce mode genere les donnees pour predire DeltaG via :
 - EA/IP verticaux et Koopmans (HOMO/LUMO)
-- Hessien ionique pour LVC2 (E_relax, eq. 9 du rapport)
+- Descripteur vibronique **LVC** : E_relax = -1/2 g_ion^T H_neutre^-1 g_ion, qui n'utilise
+  que le **Hessien neutre** (NormalModes du SP neutre) et les **gradients ioniques** analytiques.
+  Pas de Hessien ionique (evite ~6N evaluations de gradient par etat ionique).
 - Descripteurs ConceptualDFT (Fukui, durete) et QTAIM (charges Bader, E_intra, E_inter)
 
 ### 3. Analyse QTAIM/IQA

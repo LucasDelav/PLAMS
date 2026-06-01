@@ -104,7 +104,7 @@ Inclut ConceptualDFT et QTAIM sur chaque SP pour les modèles prédictifs.
 
 ## Documentation
 
-- **`CLAUDE.md`** — guide technique détaillé (architecture interne, conventions, paramètres de chaque étape, schéma composite, cluster-continuum, exemples d'usage avancé)
+- **`ARCHITECTURE.md`** — guide technique détaillé (architecture interne, conventions, paramètres de chaque étape, schéma composite, cluster-continuum, exemples d'usage avancé)
 - **`docs/`** — notes méthodologiques et justifications
 - **`rapport/`** — rapport rédigé pour le laboratoire CARMeN, source LaTeX organisée en `rapport/parts/`
 
