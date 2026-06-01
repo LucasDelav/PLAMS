@@ -10,7 +10,7 @@
 #SBATCH --error error.%j
 
 ################################################################################
-# PlamsV5 DFT: conformers → redox complet (TZ2P+DZP) → extraction JSON
+# PLAMS workflow DFT: conformers → redox complet (TZ2P+DZP) → extraction JSON
 # Reads molecules from input.txt (format: SMILES name)
 # Runs full redox pipeline (7 calculations/conformer)
 # Extracts all data into JSON dataset
@@ -39,7 +39,7 @@ FAILED_LOG="failed_molecules.txt"
 TIMING_LOG="timing.log"
 
 echo "================================================================================"
-echo "PLAMSV5 DFT COMPLET - Job ID: $SLURM_JOB_ID"
+echo "PLAMS DFT COMPLET - Job ID: $SLURM_JOB_ID"
 echo "================================================================================"
 echo "Configuration:"
 echo "  Solvent:         $SOLVENT"
@@ -82,7 +82,7 @@ echo ""
 cd "$LOCAL_WORK_DIR"
 
 # Initialize log files
-echo "# PlamsV5 DFT Complet - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
+echo "# PLAMS DFT Complet - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
 echo "# Solvent: $SOLVENT" >> "$SUMMARY_LOG"
 echo "# Mode: DFT complet (TZ2P+DZP)" >> "$SUMMARY_LOG"
 echo "# Started: $(date)" >> "$SUMMARY_LOG"

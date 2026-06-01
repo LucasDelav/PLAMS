@@ -10,7 +10,7 @@
 #SBATCH --error error.%j
 
 ################################################################################
-# PlamsV5 Prediction: conformers → predict-dg (3 SP) → extraction JSON
+# PLAMS workflow Prediction: conformers → predict-dg (3 SP) → extraction JSON
 # Reads molecules from input.txt (format: SMILES name)
 # Runs predict-dg mode (3 SP+NormalModes with ConceptualDFT + QTAIM)
 # Extracts all data into JSON dataset
@@ -39,7 +39,7 @@ FAILED_LOG="failed_molecules.txt"
 TIMING_LOG="timing.log"
 
 echo "================================================================================"
-echo "PLAMSV5 PREDICTION (SCREENING) - Job ID: $SLURM_JOB_ID"
+echo "PLAMS PREDICTION (SCREENING) - Job ID: $SLURM_JOB_ID"
 echo "================================================================================"
 echo "Configuration:"
 echo "  Solvent:         $SOLVENT"
@@ -82,7 +82,7 @@ echo ""
 cd "$LOCAL_WORK_DIR"
 
 # Initialize log files
-echo "# PlamsV5 Prediction Screening - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
+echo "# PLAMS Prediction Screening - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
 echo "# Solvent: $SOLVENT" >> "$SUMMARY_LOG"
 echo "# Mode: predict-dg" >> "$SUMMARY_LOG"
 echo "# Started: $(date)" >> "$SUMMARY_LOG"

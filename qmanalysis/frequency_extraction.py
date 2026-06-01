@@ -19,8 +19,8 @@ def find_neutral_rkf_files(workdir, molecule_name: str) -> Dict[int, Path]:
     Localise les fichiers adf.rkf des calculs neutres (DZP opt+freq).
 
     Cherche d'abord dans redox/calculations/plams_workdir/<mol>_conf_N_neutral/,
-    puis dans conformers/results/neutral_rkf_paths.json (pipeline V5 où le
-    neutre n'est pas recalculé dans le pipeline redox).
+    puis dans conformers/results/neutral_rkf_paths.json (pipeline conformères,
+    où le neutre n'est pas recalculé dans le pipeline redox).
 
     Args:
         workdir (str or Path): Répertoire de travail principal de la molécule
@@ -51,7 +51,7 @@ def find_neutral_rkf_files(workdir, molecule_name: str) -> Dict[int, Path]:
                     if conf_num not in rkf_files or job_dir.name > rkf_files[conf_num].parent.name:
                         rkf_files[conf_num] = rkf_path
 
-    # 2. Fallback : neutral_rkf_paths.json (pipeline V5)
+    # 2. Fallback : neutral_rkf_paths.json (pipeline conformères)
     if not rkf_files:
         json_path = workdir / "conformers" / "results" / "neutral_rkf_paths.json"
         if json_path.exists():

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Pipeline de génération et optimisation de conformères (V5).
+Pipeline de génération et optimisation de conformères.
 
 Pipeline en 4 étapes :
 1. Generate - Génération avec RDKit + UFF

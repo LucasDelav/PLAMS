@@ -10,7 +10,7 @@
 #SBATCH --error error.%j
 
 ################################################################################
-# PlamsV5 DFT (single-molecule) : conformers -> redox complet -> extraction JSON
+# PLAMS workflow DFT (single-molecule) : conformers -> redox complet -> extraction JSON
 # Designed to run 1 molecule per SLURM job (1 full node) for parallel batching.
 # Reads molecule from $INPUT_FILE (passed via --export at sbatch time).
 ################################################################################
@@ -38,7 +38,7 @@ FAILED_LOG="failed_molecules.txt"
 TIMING_LOG="timing.log"
 
 echo "================================================================================"
-echo "PLAMSV5 DFT BUCHARD (single-node) - Job ID: $SLURM_JOB_ID"
+echo "PLAMS DFT BUCHARD (single-node) - Job ID: $SLURM_JOB_ID"
 echo "================================================================================"
 echo "Configuration:"
 echo "  Solvent:         $SOLVENT"
@@ -80,7 +80,7 @@ echo ""
 cd "$LOCAL_WORK_DIR"
 
 # Init logs
-echo "# PlamsV5 DFT Buchard - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
+echo "# PLAMS DFT Buchard - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
 echo "# Solvent: $SOLVENT | Input: $INPUT_FILE" >> "$SUMMARY_LOG"
 echo "# Started: $(date)" >> "$SUMMARY_LOG"
 > "$FAILED_LOG"

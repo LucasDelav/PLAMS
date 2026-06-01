@@ -1,5 +1,5 @@
 """
-Scripts d'analyse post-calcul pour PlamsV5.
+Scripts d'analyse post-calcul.
 
 Tous les scripts de génération de rapports, corrélations et visualisations.
 """

@@ -1,7 +1,7 @@
 #!/usr/bin/env amspython
 # -*- coding: utf-8 -*-
 """
-Pipeline de génération et optimisation de conformères (V5).
+Pipeline de génération et optimisation de conformères.
 
 Pipeline simplifié en 4 étapes :
 1. Generate RDKit+UFF
@@ -38,7 +38,7 @@ from qmconf.pipeline import (
 def parse_arguments():
     """Parse les arguments de la ligne de commande."""
     parser = argparse.ArgumentParser(
-        description="Pipeline de génération et optimisation de conformères (V5)",
+        description="Pipeline de génération et optimisation de conformères",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemples d'utilisation:
@@ -110,7 +110,7 @@ def main():
     """Fonction principale du programme."""
     args = parse_arguments()
 
-    print_header("PIPELINE DE GÉNÉRATION DE CONFORMÈRES (V5)")
+    print_header("PIPELINE DE GÉNÉRATION DE CONFORMÈRES")
 
     # =======================================================================
     # MODE ANALYSE SEULE
@@ -474,7 +474,7 @@ def _export_results(args, results_dir, final_conformers,
     with open(summary_file, 'w') as f:
         f.write(f"{'='*80}\n")
         mode_label = "CLUSTER-CONTINUUM" if cluster_continuum else "STANDARD"
-        f.write(f"RÉSUMÉ DE GÉNÉRATION DE CONFORMÈRES (V5 - {mode_label})\n")
+        f.write(f"RÉSUMÉ DE GÉNÉRATION DE CONFORMÈRES ({mode_label})\n")
         f.write(f"{'='*80}\n\n")
         f.write(f"Molécule:          {args.name}\n")
         f.write(f"SMILES:            {args.smiles}\n")

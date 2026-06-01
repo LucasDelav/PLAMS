@@ -1,4 +1,4 @@
-# PLAMS V5 — Workflows automatisés pour la prédiction de propriétés redox par DFT
+# PLAMS — Workflows automatisés pour la prédiction de propriétés redox par DFT
 
 Système de workflows de chimie computationnelle pour le criblage haut-débit de matériaux redox-actifs organiques (couple catéchol/quinone), construit sur l'Amsterdam Modeling Suite (AMS) et la bibliothèque PLAMS. Le projet automatise la chaîne complète conformères → DFT → analyses, et explore des modèles prédictifs physiquement motivés pour réduire le coût computationnel du criblage.
 
@@ -34,7 +34,7 @@ PlamsV5/
 
 Le dossier `analysis/archive/` contient les scripts ponctuels (extractions, balayages, figures one-shot) qui ont servi à la rédaction du rapport et qui sont gardés pour la traçabilité. Les scripts d'analyse encore régulièrement utilisés sont dans `analysis/formula_search/`.
 
-## Caractéristiques clés (V5)
+## Caractéristiques clés
 
 - **Schéma composite TZ2P+DZP** pour les énergies redox : énergie électronique en TZ2P, corrections thermodynamiques en DZP, avec résiduel de décomposition systématiquement nul par construction
 - **Réutilisation du neutre optimisé** entre pipelines via `neutral_rkf_paths.json` (le neutre n'est pas recalculé dans le pipeline redox)
@@ -127,7 +127,7 @@ Amsterdam, The Netherlands, https://www.scm.com
 
 PLAMS — Python Library for Automating Molecular Simulation
 
-PLAMS V5, Lucas Delavoye, Laboratoire CARMeN (UMR CNRS 6064), 2026
+PLAMS, Lucas Delavoye, Laboratoire CARMeN (UMR CNRS 6064), 2026
 https://github.com/LucasDelav/PLAMS
 ```
 

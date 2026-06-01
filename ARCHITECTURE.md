@@ -1,26 +1,26 @@
 # ARCHITECTURE.md
 
-Documentation technique du dépôt PlamsV5 : architecture des pipelines, conventions de code, paramètres et organisation des répertoires.
+Documentation technique du dépôt PLAMS : architecture des pipelines, conventions de code, paramètres et organisation des répertoires.
 
 > **Note de transparence.** Ce fichier est dérivé de `CLAUDE.md`, un guide initialement rédigé pour orienter l'assistant Claude Code (claude.ai/code) lors du développement du projet. Le contenu a été conservé tel quel parce qu'il constitue, indépendamment de son origine, une documentation technique complète du dépôt. `CLAUDE.md` reste maintenu en local par l'auteur pour le travail quotidien avec un assistant IA, mais c'est `ARCHITECTURE.md` qui sert de référence partagée à l'équipe.
 
 ## Overview
 
-PlamsV5 est un systeme de workflows de chimie computationnelle construit sur l'Amsterdam Modeling Suite (AMS) et PLAMS (Python Library for Automating Molecular Simulations). Le projet implemente quatre pipelines principaux :
+Ce dépôt fournit un système de workflows de chimie computationnelle construit sur l'Amsterdam Modeling Suite (AMS) et PLAMS (Python Library for Automating Molecular Simulations). Le projet implemente quatre pipelines principaux :
 
 1. **Conformer Generation & Optimization** (qmconf) - Pipeline simplifie en 4 etapes
 2. **Redox Potential Calculations** (qmredox) - Schema composite TZ2P+DZP, reutilisation du neutre
 3. **QTAIM/IQA Topological Analysis** (qmqtaim) - Analyse topologique et decomposition energetique
 4. **Frequency-Edef Correlation Analysis** (qmanalysis) - Correlations frequences vibrationnelles vs Edef
 
-### Changements par rapport a V4
+### Points méthodologiques clés
 
-- **Conformeres** : 6 etapes -> 4 etapes (suppression score DFT et filter RMSD)
-- **GFN1-xTB** remplace DFTB generique pour l'optimisation semi-empirique
+- **Conformeres** : pipeline en 4 etapes (Generate → Optimize → Boltzmann → DFT opt+freq+solvant)
+- **GFN1-xTB** pour l'optimisation semi-empirique
 - **DFT opt+freq+solvant** obligatoire (etape 4 des conformeres)
 - **Neutre non recalcule** dans le pipeline redox : reutilisation du RKF de l'etape 4
 - **Schema composite TZ2P+DZP** : Ee(TZ2P) + corrections thermo(DZP)
-- **Seuil Boltzmann** : 0.10 (etait 0.05)
+- **Seuil Boltzmann** : 0.10
 - **neutral_rkf_paths.json** : pont entre conformeres et redox
 
 ## Architecture du Projet
@@ -225,7 +225,7 @@ Ce mode genere les donnees pour predire DeltaG via :
 
 ## Schema Composite TZ2P+DZP
 
-Le pipeline redox V5 utilise un schema d'energie composite :
+Le pipeline redox utilise un schema d'energie composite :
 
 ```python
 # Energie composite : Ee(TZ2P) + corrections thermo(DZP)
@@ -259,7 +259,7 @@ R = 8.314462618           # Constante des gaz parfaits [J/(mol*K)]
 TEMPERATURE = 298.15      # Temperature par defaut [K]
 EH_TO_EV = 27.211386245988    # Hartree -> eV
 EH_TO_KJ = 2625.499638        # Hartree -> kJ/mol
-BOLTZMANN_MIN_WEIGHT_DEFAULT = 0.10  # Seuil Boltzmann (V5)
+BOLTZMANN_MIN_WEIGHT_DEFAULT = 0.10  # Seuil Boltzmann
 ```
 
 ### Configuration des Fonctionnelles (common/functional.py)

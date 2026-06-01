@@ -10,7 +10,7 @@
 #SBATCH --error error.%j
 
 ################################################################################
-# PlamsV5 DFT (Water re-run, backfill-friendly) : conformers -> redox -> JSON
+# PLAMS workflow DFT (Water re-run, backfill-friendly) : conformers -> redox -> JSON
 # One chunk of (typically 2) small molecules per job, 1 full node, 2tcourt 12h.
 # Designed to backfill into short gaps rather than wait for a single long block.
 # Each molecule's workdir is copied back to the submit dir AS SOON AS it finishes,
@@ -50,7 +50,7 @@ RESULTS_DIR="$SLURM_SUBMIT_DIR/Water_missing_${SLURM_JOB_ID}"
 mkdir -p "$RESULTS_DIR"
 
 echo "================================================================================"
-echo "PLAMSV5 DFT WATER RE-RUN (2tcourt backfill) - Job ID: $SLURM_JOB_ID"
+echo "PLAMS DFT WATER RE-RUN (2tcourt backfill) - Job ID: $SLURM_JOB_ID"
 echo "================================================================================"
 echo "Configuration:"
 echo "  Solvent:         $SOLVENT"
@@ -107,7 +107,7 @@ cd "$LOCAL_WORK_DIR"
 INPUT_FILE="$(basename "$INPUT_FILE")"
 
 # Init logs
-echo "# PlamsV5 DFT Water re-run (2tcourt) - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
+echo "# PLAMS DFT Water re-run (2tcourt) - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
 echo "# Solvent: $SOLVENT | Input: $INPUT_FILE" >> "$SUMMARY_LOG"
 echo "# Started: $(date)" >> "$SUMMARY_LOG"
 > "$FAILED_LOG"

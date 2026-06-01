@@ -1,5 +1,5 @@
 """
-Module d'analyse fréquence-Edef pour PlamsV5.
+Module d'analyse fréquence-Edef.
 
 Ce module fournit des outils pour extraire les données de fréquences vibrationnelles
 depuis les fichiers RKF, calculer des descripteurs, et chercher des corrélations

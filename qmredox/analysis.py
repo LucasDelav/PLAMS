@@ -1,5 +1,5 @@
 """
-Analyse des résultats redox V5 : extraction d'énergies, calculs de potentiels
+Analyse des résultats redox : extraction d'énergies, calculs de potentiels
 avec schéma composite TZ2P+DZP, moyennes de Boltzmann et export des résultats.
 """
 
@@ -81,7 +81,7 @@ def extract_all_energies(jobs_data, u_method="direct"):
     """
     Extrait les énergies de tous les jobs organisés par conformère.
 
-    Gère le cas V5 où 'neutral_rkf' est un chemin (str) et non un job PLAMS,
+    Gère le cas où 'neutral_rkf' est un chemin (str) et non un job PLAMS,
     et où 'neutral_tz2p', 'reduced_tz2p', 'oxidized_tz2p' sont des jobs SP.
 
     Args:
@@ -646,7 +646,7 @@ def export_results_to_file(workdir, mol_name, results_data):
 
     with open(output_file, 'w') as f:
         f.write("="*80 + "\n")
-        f.write(f"ANALYSE DES POTENTIELS REDOX (V5 composite TZ2P+DZP) : {mol_name}\n")
+        f.write(f"ANALYSE DES POTENTIELS REDOX (composite TZ2P+DZP) : {mol_name}\n")
         f.write("="*80 + "\n\n")
 
         f.write(f"Méthode de calcul de U : {results_data['u_method']}\n")
@@ -969,7 +969,7 @@ def analyze_molecule_redox(mol_name, jobs_data, workdir, temperature=298.15,
         dict: Résultats complets de l'analyse
     """
     print(f"\n{'='*80}")
-    print(f"ANALYSE REDOX (V5 composite TZ2P+DZP) : {mol_name}")
+    print(f"ANALYSE REDOX (composite TZ2P+DZP) : {mol_name}")
     print(f"{'='*80}\n")
 
     # 1. Extraction des énergies

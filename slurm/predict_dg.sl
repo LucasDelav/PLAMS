@@ -10,7 +10,7 @@
 #SBATCH --error error.%j
 
 ################################################################################
-# PlamsV5 Predict-DG
+# PLAMS workflow Predict-DG
 #
 # Pour chaque molécule :
 #   1. Copie les conformères pré-calculés depuis CONFORMERS_DIR
@@ -50,7 +50,7 @@ FAILED_LOG="failed_molecules.txt"
 TIMING_LOG="timing.log"
 
 echo "================================================================================"
-echo "PLAMSV5 PREDICT-DG - Job ID: $SLURM_JOB_ID"
+echo "PLAMS PREDICT-DG - Job ID: $SLURM_JOB_ID"
 echo "================================================================================"
 echo "Configuration:"
 echo "  Solvent:         $SOLVENT"
@@ -196,7 +196,7 @@ echo ""
 cd "$LOCAL_WORK_DIR"
 
 # Initialize log files
-echo "# PlamsV5 Predict-DG - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
+echo "# PLAMS Predict-DG - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
 echo "# Solvent: $SOLVENT" >> "$SUMMARY_LOG"
 echo "# Conformers source: $CONFORMERS_DIR" >> "$SUMMARY_LOG"
 echo "# Valid: $valid / Invalid: $invalid" >> "$SUMMARY_LOG"

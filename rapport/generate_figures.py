@@ -1,6 +1,6 @@
 #!/usr/bin/env amspython
 """
-Generate all publication-quality figures for the V5 report.
+Generate all publication-quality figures for the report.
 
 Produces all figures from:
   - Redox CSV data in data/Acetonitrile/ (always available)
@@ -1356,7 +1356,7 @@ def plot_beyond_koopmans(per_conf):
 
 def main():
     print("=" * 60)
-    print("FIGURE GENERATION - RAPPORT V5")
+    print("FIGURE GENERATION - RAPPORT")
     print("=" * 60)
     print(f"Data:     {DATA_DIR}")
     print(f"Optional: {OPTIONAL_DATA_DIR}")

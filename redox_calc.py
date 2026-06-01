@@ -1,11 +1,10 @@
 #!/usr/bin/env amspython
 """
-Script principal pour le calcul de potentiels redox par DFT (V5).
+Script principal pour le calcul de potentiels redox par DFT.
 
-Changements V5 :
-- Le neutre n'est plus recalculé : réutilisation du RKF de l'étape 4 conformères
-- Schéma composite TZ2P+DZP pour les énergies
-- Lecture depuis neutral_rkf_paths.json
+Le neutre n'est pas recalculé : le RKF produit par l'étape DFT du pipeline
+conformères est réutilisé directement (chemin lu depuis neutral_rkf_paths.json).
+Les énergies électroniques suivent un schéma composite TZ2P+DZP.
 
 Usage:
     # Mode calculs complets:
@@ -32,7 +31,7 @@ from qmredox.analysis import analyze_molecule_redox, analyze_molecule_predict_dg
 def parse_arguments():
     """Parse les arguments de la ligne de commande."""
     parser = argparse.ArgumentParser(
-        description="Calcul de potentiels redox par DFT (V5 - composite TZ2P+DZP)",
+        description="Calcul de potentiels redox par DFT (composite TZ2P+DZP)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemples d'utilisation:
@@ -153,7 +152,7 @@ def load_conformers_from_neutral_data(input_dir):
 
 def load_existing_jobs(workdir, name, predict_dg=False):
     """
-    Charge les jobs existants depuis un répertoire de calculs V5.
+    Charge les jobs existants depuis un répertoire de calculs.
 
     Args:
         workdir (str): Répertoire de travail principal
@@ -253,7 +252,7 @@ def main():
     """Fonction principale du programme."""
     args = parse_arguments()
 
-    print_header("CALCUL DE POTENTIELS REDOX PAR DFT (V5)")
+    print_header("CALCUL DE POTENTIELS REDOX PAR DFT")
 
     # MODE ANALYSE SEULE
     if args.analysis_only:

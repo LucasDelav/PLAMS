@@ -1,5 +1,5 @@
 """
-Pipeline de calculs redox V5.
+Pipeline de calculs redox.
 
 Le neutre n'est plus recalculé : on réutilise le RKF de l'étape 4 des conformères.
 Nouveau schéma composite TZ2P+DZP pour les énergies.

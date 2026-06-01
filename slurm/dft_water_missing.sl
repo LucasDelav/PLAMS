@@ -10,7 +10,7 @@
 #SBATCH --error error.%j
 
 ################################################################################
-# PlamsV5 DFT (Water re-run) : conformers -> redox complet -> extraction JSON
+# PLAMS workflow DFT (Water re-run) : conformers -> redox complet -> extraction JSON
 # Recalcule en EAU AUTHENTIQUE les 32 molecules dont les fichiers "Water"
 # etaient des copies du Chloroform (mauvais routage au fetch, cf. rapport
 # sec:multisolvant). Une seule tache, un noeud complet, partition tlong (300h),
@@ -46,7 +46,7 @@ FAILED_LOG="failed_molecules.txt"
 TIMING_LOG="timing.log"
 
 echo "================================================================================"
-echo "PLAMSV5 DFT WATER RE-RUN (single-node) - Job ID: $SLURM_JOB_ID"
+echo "PLAMS DFT WATER RE-RUN (single-node) - Job ID: $SLURM_JOB_ID"
 echo "================================================================================"
 echo "Configuration:"
 echo "  Solvent:         $SOLVENT"
@@ -89,7 +89,7 @@ echo ""
 cd "$LOCAL_WORK_DIR"
 
 # Init logs
-echo "# PlamsV5 DFT Water re-run - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
+echo "# PLAMS DFT Water re-run - Job $SLURM_JOB_ID" > "$SUMMARY_LOG"
 echo "# Solvent: $SOLVENT | Input: $INPUT_FILE" >> "$SUMMARY_LOG"
 echo "# Started: $(date)" >> "$SUMMARY_LOG"
 > "$FAILED_LOG"

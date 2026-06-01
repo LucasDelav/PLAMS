@@ -1,4 +1,4 @@
-# Système de Visualisation PlamsV5
+# Système de Visualisation
 
 ## Vue d'ensemble
 
