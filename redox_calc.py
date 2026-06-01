@@ -57,8 +57,9 @@ Exemples d'utilisation:
                         help="Nom de la molécule")
 
     parser.add_argument('--predict-dg', action='store_true',
-                        help="Mode criblage rapide : 3 SP+NormalModes sur géom neutre "
-                             "avec ConceptualDFT et QTAIM (au lieu des 7 calculs complets)")
+                        help="Mode criblage rapide : 3 SP sur géom neutre (NormalModes sur "
+                             "le neutre, gradient seul sur les ions) avec ConceptualDFT et "
+                             "QTAIM (au lieu des 7 calculs complets)")
     parser.add_argument('--analysis-only', action='store_true',
                         help="Analyser des calculs existants sans lancer de nouveaux calculs")
     parser.add_argument('--workdir', type=str,

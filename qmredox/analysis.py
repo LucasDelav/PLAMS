@@ -1078,7 +1078,8 @@ def analyze_molecule_redox(mol_name, jobs_data, workdir, temperature=298.15,
 
 def calculate_predict_dg_parameters(conformers_energies):
     """
-    Calcule les paramètres redox en mode predict-dg (SP+NormalModes sur géom neutre).
+    Calcule les paramètres redox en mode predict-dg (SP sur géom neutre : NormalModes
+    sur le neutre, gradient seul sur les ions).
 
     DG = G(ion_sp) - G(neutral_sp), EA/IP verticaux depuis Ee.
 

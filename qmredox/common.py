@@ -66,7 +66,7 @@ def setup_workspace(name):
 
 def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=0,
                        solvent="Acetonitrile", functional="PBE0", basis="DZP",
-                       normal_modes=None, extra_adf_blocks=None):
+                       normal_modes=None, gradients=False, extra_adf_blocks=None):
     """
     Configure un objet Settings pour un calcul ADF.
 
@@ -77,8 +77,13 @@ def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=
         solvent (str): Nom du solvant pour solvatation COSMO (défaut: "Acetonitrile")
         functional (str): Fonctionnelle DFT (défaut: "PBE0")
         basis (str): Base atomique (défaut: "DZP")
-        normal_modes (bool or None): Activer les modes normaux.
+        normal_modes (bool or None): Activer les modes normaux (Hessien).
             None = auto (Yes pour GeomOpt, No pour SinglePoint).
+        gradients (bool): Demander explicitement le gradient nucléaire analytique.
+            Utile pour un SinglePoint sans NormalModes : le gradient (analytique,
+            quasi gratuit) suffit au descripteur vibronique LVC, qui n'utilise que
+            le Hessien du neutre. Évite les ~6N évaluations de gradient qu'impose
+            un Hessien ionique numérique (PBE0+COSMO).
         extra_adf_blocks (dict or None): Blocs ADF supplémentaires à ajouter.
             Ex: {'ConceptualDFT': {'Enabled': 'Yes', 'AnalysisLevel': 'Full'}}
 
@@ -99,6 +104,10 @@ def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=
     elif normal_modes:
         s.input.ams.Properties.NormalModes = "Yes"
 
+    # Gradient nucléaire analytique (sans le coût d'un Hessien)
+    if gradients:
+        s.input.ams.Properties.Gradients = "Yes"
+
     # Configuration du moteur ADF
     s.input.adf.Basis.Type = basis
     s.input.adf.Basis.Core = "None"
@@ -112,6 +121,12 @@ def setup_adf_settings(task='GeometryOptimization', charge=0, spin_polarization=
     # Paramètres pour les molécules chargées
     if charge != 0:
         s.input.ams.System.Charge = charge
+
+        # Aides à la convergence SCF pour les états ioniques (open-shell)
+        # Empêche les divergences observées sur les cations TZ2P (ex. Mol_3_ox)
+        s.input.adf.SCF.Iterations = 500
+        s.input.adf.SCF.Mixing = 0.05
+        s.input.adf.SCF.Converge = "1.0e-6 1.0e-6"
 
     # Paramètres pour les systèmes à couche ouverte
     if spin_polarization > 0:

@@ -21,7 +21,7 @@ from common.frequency import check_and_fix_frequencies
 
 
 def _run_single_point(mol, name, charge, spin_polarization, solvent, functional, basis,
-                      normal_modes=False, extra_adf_blocks=None):
+                      normal_modes=False, gradients=False, extra_adf_blocks=None):
     """Run a SinglePoint calculation and return the job."""
     settings = setup_adf_settings(
         task='SinglePoint',
@@ -31,6 +31,7 @@ def _run_single_point(mol, name, charge, spin_polarization, solvent, functional,
         functional=functional,
         basis=basis,
         normal_modes=normal_modes,
+        gradients=gradients,
         extra_adf_blocks=extra_adf_blocks
     )
 
@@ -308,12 +309,19 @@ def run_predict_dg_pipeline(mol_neutral, neutral_rkf_path, name,
                             solvent="Acetonitrile", functional="PBE0",
                             basis="DZP"):
     """
-    Pipeline predict-dg : 3 SP+NormalModes sur géométrie neutre avec ConceptualDFT et QTAIM.
+    Pipeline predict-dg : 3 single points sur géométrie neutre avec ConceptualDFT et QTAIM.
 
     Génère les données nécessaires à la prédiction de DeltaG :
     - EA/IP verticaux et Koopmans (HOMO/LUMO)
-    - Hessien ionique pour LVC2 (E_relax)
-    - Descripteurs ConceptualDFT et QTAIM
+    - Hessien NEUTRE (NormalModes sur le seul SP neutre) pour le descripteur
+      vibronique LVC : E_relax = -1/2 g_ion^T H_neutre^{-1} g_ion
+    - Gradients ioniques (analytiques) pour LVC, sans Hessien ionique
+    - Descripteurs ConceptualDFT et QTAIM (sur les 3 états de charge)
+
+    Note : seul le SP neutre porte NormalModes (Hessien neutre, réutilisé aussi
+    par la thermochimie). Les SP ioniques ne demandent que le gradient analytique
+    (quasi gratuit) : LVC n'a pas besoin du Hessien ionique, ce qui évite ~6N
+    évaluations de gradient par état ionique (Hessien numérique PBE0+COSMO).
 
     Args:
         mol_neutral (Molecule): Molécule neutre optimisée (depuis conformères)
@@ -339,7 +347,7 @@ def run_predict_dg_pipeline(mol_neutral, neutral_rkf_path, name,
         print(f"PIPELINE PREDICT-DG : {name}")
         print(f"{'='*60}")
 
-        # 1. SP + NormalModes neutre (ConceptualDFT + QTAIM)
+        # 1. SP + NormalModes neutre (Hessien neutre pour LVC + ConceptualDFT + QTAIM)
         print(f"\n  === SP NEUTRE + NormalModes : {name} ===")
         results['neutral_sp'] = _run_single_point(
             mol_neutral, f"{name}_neutral_sp",
@@ -348,22 +356,22 @@ def run_predict_dg_pipeline(mol_neutral, neutral_rkf_path, name,
             normal_modes=True, extra_adf_blocks=extra_adf_blocks
         )
 
-        # 2. SP + NormalModes réduit (ConceptualDFT + QTAIM)
-        print(f"\n  === SP RÉDUIT + NormalModes : {name} ===")
+        # 2. SP réduit : gradient seul (pour LVC) + ConceptualDFT + QTAIM, sans Hessien
+        print(f"\n  === SP RÉDUIT (gradient) : {name} ===")
         results['reduced_sp'] = _run_single_point(
             mol_neutral, f"{name}_reduced_sp",
             charge=-1, spin_polarization=1,
             solvent=solvent, functional=functional, basis=basis,
-            normal_modes=True, extra_adf_blocks=extra_adf_blocks
+            normal_modes=False, gradients=True, extra_adf_blocks=extra_adf_blocks
         )
 
-        # 3. SP + NormalModes oxydé (ConceptualDFT + QTAIM)
-        print(f"\n  === SP OXYDÉ + NormalModes : {name} ===")
+        # 3. SP oxydé : gradient seul (pour LVC) + ConceptualDFT + QTAIM, sans Hessien
+        print(f"\n  === SP OXYDÉ (gradient) : {name} ===")
         results['oxidized_sp'] = _run_single_point(
             mol_neutral, f"{name}_oxidized_sp",
             charge=1, spin_polarization=1,
             solvent=solvent, functional=functional, basis=basis,
-            normal_modes=True, extra_adf_blocks=extra_adf_blocks
+            normal_modes=False, gradients=True, extra_adf_blocks=extra_adf_blocks
         )
 
         print(f"\n{'='*60}")
