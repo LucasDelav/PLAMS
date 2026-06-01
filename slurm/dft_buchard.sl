@@ -116,24 +116,31 @@ while read -r smiles name; do
     molecule_success=true
 
     # ------------------------------------------------------------------------
-    # STEP 1: Conformers
+    # STEP 1: Conformers (skip if already present)
     # ------------------------------------------------------------------------
-    echo "-> Step 1/2: Conformers Generation"
-    echo "--------------------------------------------------------------------------------"
-
-    amspython conformers_gen.py \
-        --name "$name" \
-        --smiles "$smiles" \
-        --solvent "$SOLVENT"
-
-    if [ $? -ne 0 ]; then
-        echo "x ERROR: Conformers generation failed for $name"
-        echo "$name: conformers_failed" >> "$FAILED_LOG"
-        molecule_success=false
+    if [ -f "${name}_workdir/conformers/results/neutral_rkf_paths.json" ]; then
+        echo "-> Step 1/2: Conformers already present, skipping"
+        echo "--------------------------------------------------------------------------------"
+        echo "+ Reusing ${name}_workdir/conformers/results/"
+        echo ""
     else
-        echo "+ Conformers generation completed"
+        echo "-> Step 1/2: Conformers Generation"
+        echo "--------------------------------------------------------------------------------"
+
+        amspython conformers_gen.py \
+            --name "$name" \
+            --smiles "$smiles" \
+            --solvent "$SOLVENT"
+
+        if [ $? -ne 0 ]; then
+            echo "x ERROR: Conformers generation failed for $name"
+            echo "$name: conformers_failed" >> "$FAILED_LOG"
+            molecule_success=false
+        else
+            echo "+ Conformers generation completed"
+        fi
+        echo ""
     fi
-    echo ""
 
     # ------------------------------------------------------------------------
     # STEP 2: Redox (TZ2P+DZP)
