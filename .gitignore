@@ -34,10 +34,10 @@ rapport/test_screening/
 analysis/formula_search/results/all_results.parquet
 
 # Ephemeral input lists (re-generated per screening campaign)
+# NB : input.txt EST tracké (catalogue canonique des SMILES, sert à la reproductibilité)
 input_missing_*.txt
 input_buchard_*.txt
 input_Mol_*.txt
-input.txt
 water_chunks/
 
 # Backups occasionnels au format *.BACKUP-<date>
